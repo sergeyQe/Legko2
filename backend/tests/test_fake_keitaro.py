@@ -10,13 +10,14 @@ from app.keitaro.errors import (
     KeitaroUnreachableError,
 )
 from app.keitaro.factory import build_keitaro_client
-from app.keitaro.mock_client import MockKeitaroClient
+from app.keitaro.http_client import HttpKeitaroClient
+from tests.fake_keitaro import FakeKeitaroClient
 from app.keitaro.models import NewCampaign, PushOffer
 
 
 @pytest.fixture
-def kt() -> MockKeitaroClient:
-    return MockKeitaroClient()
+def kt() -> FakeKeitaroClient:
+    return FakeKeitaroClient()
 
 
 def test_seed_matches_screenshots(kt):
@@ -65,7 +66,7 @@ def test_search_finds_by_id_and_by_name(kt):
 
 
 def test_references_are_available(kt):
-    assert "in.posdk.xyz" in [d.name for d in kt.list_domains()]
+    assert "kylovoa.com" in [d.name for d in kt.list_domains()]
     assert "FORTESTS" in [g.name for g in kt.list_groups()]
     assert "FORTESTS" in [s.name for s in kt.list_traffic_sources()]
 
@@ -170,10 +171,19 @@ def test_reset_restores_seed_and_clears_failures(kt):
     assert kt.describe()["failures"] == []
 
 
-def test_factory_returns_mock_by_default():
-    assert isinstance(build_keitaro_client(Settings(keitaro_mode="mock")), MockKeitaroClient)
+def test_factory_builds_http_client_for_real_keitaro():
+    client = build_keitaro_client(Settings(_env_file=None, keitaro_url="https://kt.example.com", keitaro_api_key="k"))
+    assert isinstance(client, HttpKeitaroClient)
 
 
-def test_factory_requires_url_and_key_for_real_mode():
+def test_factory_requires_url_and_key():
     with pytest.raises(ValueError):
-        build_keitaro_client(Settings(keitaro_mode="real", keitaro_url="", keitaro_api_key=""))
+        build_keitaro_client(Settings(_env_file=None, keitaro_url="", keitaro_api_key=""))
+    with pytest.raises(ValueError):
+        build_keitaro_client(Settings(_env_file=None, keitaro_url="https://kt.example.com", keitaro_api_key=""))
+
+
+def test_fake_get_campaign(kt):
+    assert kt.get_campaign(93212).name == "test_titov_campaign2"
+    with pytest.raises(KeitaroNotFoundError):
+        kt.get_campaign(1)

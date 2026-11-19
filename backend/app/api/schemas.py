@@ -217,32 +217,14 @@ class OfferSearchOut(BaseModel):
     geo: str = Field(description="Гео")
 
 
-# ---------- служебные и демо ----------
+# ---------- служебные ----------
 
 class MetaOut(BaseModel):
     """Сведения о сервисе."""
 
-    mode: Literal["mock", "real"] = Field(description="Режим Keitaro: mock — заглушка, real — настоящий Admin API")
     version: str = Field(description="Версия сервиса")
-    keitaro_url: str = Field(description="Адрес Keitaro для ссылки «Кампания в Keitaro» (пусто в режиме mock)")
-
-
-class ExternalChangeBody(BaseModel):
-    """Имитация правки в Keitaro (только режим mock)."""
-
-    scenario: Literal["offer_added", "weight_changed", "offer_removed"] = Field(
-        description="offer_added — добавлен оффер, weight_changed — изменён вес, offer_removed — удалён оффер"
+    keitaro_url: str = Field(description="Адрес Keitaro для ссылки «Кампания в Keitaro»")
+    campaign_prefix: str = Field(
+        description="Префикс названий кампаний, с которыми работает сервис (чужие кампании не показываются и не изменяются)",
+        examples=["test_titov_"],
     )
-    stream_id: int = Field(description="ID потока в Keitaro (keitaro_id)", examples=[2])
-    offer_id: int = Field(description="ID оффера", examples=[11120])
-    weight: int = Field(default=20, ge=0, le=100, description="Вес оффера, % (для offer_added и weight_changed)")
-
-
-class FailureBody(BaseModel):
-    """Планирование сбоя Keitaro (только режим mock)."""
-
-    kind: Literal["network", "auth", "edition", "not_found", "rejected"] = Field(description="Вид сбоя")
-    target: Literal["fetch", "push", "create_campaign", "create_stream1", "create_stream2"] = Field(
-        description="На какой операции сработает сбой"
-    )
-    times: int = Field(default=1, ge=1, le=20, description="Сколько вызовов подряд завершатся ошибкой")

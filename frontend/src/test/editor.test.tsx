@@ -29,7 +29,7 @@ const afterAdd = stream(
 );
 
 function open() {
-  return render(<CampaignEditorPage campaignId={1} keitaroUrl="" onBack={() => undefined} />);
+  return render(<CampaignEditorPage campaignId={1} keitaroUrl="https://kt.example.com/" onBack={() => undefined} />);
 }
 
 beforeEach(() => {
@@ -162,11 +162,11 @@ describe("редактор кампании", () => {
     expect(screen.getByTestId("offer-11109")).toHaveTextContent("100%");
   });
 
-  it("предупреждает о merge и не обещает ссылку на Keitaro в режиме mock", async () => {
+  it("предупреждает о merge и даёт ссылку на Keitaro", async () => {
     open();
     await screen.findByTestId("stream-2");
     expect(screen.getByText(/Не меняйте поток в Keitaro/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Кампания в Keitaro/ })).toBeDisabled();
+    expect(screen.getByRole("link", { name: /Кампания в Keitaro/ })).toHaveAttribute("href", "https://kt.example.com/admin/");
   });
 });
 
@@ -255,7 +255,7 @@ describe("отправка в Keitaro", () => {
     mocked.campaign.mockRejectedValue(new ApiError(404, "NOT_FOUND", "Кампания 5 не найдена."));
     const onBack = vi.fn();
     const user = userEvent.setup();
-    render(<CampaignEditorPage campaignId={5} keitaroUrl="" onBack={onBack} />);
+    render(<CampaignEditorPage campaignId={5} keitaroUrl="https://kt.example.com/" onBack={onBack} />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Кампания 5 не найдена.");
     await user.click(screen.getByRole("button", { name: "К списку кампаний" }));
     expect(onBack).toHaveBeenCalled();

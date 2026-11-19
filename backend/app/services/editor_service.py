@@ -28,16 +28,21 @@ class EditorService:
     успешного ответа Keitaro. Поэтому при любой ошибке черновик остаётся как был.
     """
 
-    def __init__(self, session: Session, keitaro: KeitaroClient) -> None:
+    def __init__(self, session: Session, keitaro: KeitaroClient, campaign_prefix: str) -> None:
+        # стенд Keitaro общий: без префикса нельзя отличить свои кампании от чужих, поэтому он обязателен
+        if not campaign_prefix:
+            raise ValueError("CAMPAIGN_PREFIX не задан: без префикса сервис не может отличить свои кампании от чужих")
         self._session = session
         self._keitaro = keitaro
+        self._prefix = campaign_prefix.casefold()
 
     # ---------- кампании и загрузка из Keitaro ----------
 
     def list_campaigns(self) -> list[CampaignSummary]:
         """Список кампаний из Keitaro со сводкой по нашим черновикам."""
         # синхронизируем названия кампаний с Keitaro
-        kt_campaigns = self._keitaro.list_campaigns()
+        kt_campaigns = [c for c in self._keitaro.list_campaigns() if self._is_ours(c.name)]
+        self._drop_foreign_campaigns()
         summaries: list[CampaignSummary] = []
         for kt in kt_campaigns:
             campaign = self._upsert_campaign(kt.campaign_id, kt.name, kt.alias)
@@ -76,10 +81,12 @@ class EditorService:
     def _fetch_campaign_once(self, keitaro_campaign_id: int) -> CampaignView:
         """Одна попытка загрузки потоков кампании из Keitaro."""
         # сначала читаем Keitaro: при ошибке в нашей БД ничего не меняется
+        # сначала убеждаемся, что кампания наша (по префиксу названия), и только потом читаем её потоки
+        kt_campaign = self._keitaro.get_campaign(keitaro_campaign_id)
+        self._require_ours(kt_campaign.name, "campaign", keitaro_campaign_id)
         kt_streams = self._keitaro.get_campaign_streams(keitaro_campaign_id)
-        kt_campaign = next((c for c in self._keitaro.list_campaigns() if c.campaign_id == keitaro_campaign_id), None)
-        name = kt_campaign.name if kt_campaign else f"Кампания {keitaro_campaign_id}"
-        alias = kt_campaign.alias if kt_campaign else ""
+        name = kt_campaign.name
+        alias = kt_campaign.alias
         campaign = self._upsert_campaign(keitaro_campaign_id, name, alias)
 
         # обновляем потоки и офферы по данным Keitaro
@@ -202,18 +209,38 @@ class EditorService:
 
     # ---------- внутренние помощники ----------
 
+    def _is_ours(self, campaign_name: str) -> bool:
+        """Наша ли кампания: название начинается с префикса (регистр не важен)."""
+        return campaign_name.casefold().startswith(self._prefix)
+
+    def _require_ours(self, campaign_name: str, entity: str, entity_id: int) -> None:
+        """Чужие кампании для сервиса не существуют: отвечаем «не найдено», не раскрывая, что они есть."""
+        if not self._is_ours(campaign_name):
+            logger.warning("Отказ: кампания «%s» не начинается с префикса, действие над ней запрещено", campaign_name)
+            raise EntityNotFoundError(entity, entity_id)
+
+    def _drop_foreign_campaigns(self) -> None:
+        """Удаляет из нашей копии кампании без префикса (остатки прежних запусков); в Keitaro ничего не меняется."""
+        for campaign in self._session.scalars(select(Campaign)).all():
+            if not self._is_ours(campaign.name):
+                logger.info("Убираем из копии кампанию без префикса: %s", campaign.keitaro_id)
+                self._session.delete(campaign)
+        self._session.flush()
+
     def _get_campaign(self, campaign_id: int) -> Campaign:
-        """Кампания по внутреннему ID или ошибка."""
+        """Кампания по внутреннему ID или ошибка (чужие кампании считаются несуществующими)."""
         campaign = self._session.get(Campaign, campaign_id)
         if campaign is None:
             raise EntityNotFoundError("campaign", campaign_id)
+        self._require_ours(campaign.name, "campaign", campaign_id)
         return campaign
 
     def _get_stream(self, stream_id: int) -> Stream:
-        """Поток по внутреннему ID или ошибка."""
+        """Поток по внутреннему ID или ошибка (потоки чужих кампаний считаются несуществующими)."""
         stream = self._session.get(Stream, stream_id)
         if stream is None:
             raise EntityNotFoundError("stream", stream_id)
+        self._require_ours(stream.campaign.name, "stream", stream_id)
         return stream
 
     def _upsert_campaign(self, keitaro_id: int, name: str, alias: str) -> Campaign:

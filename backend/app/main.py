@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.errors import register_exception_handlers
-from app.api.routes import campaigns, creator, mock, references, streams, system
+from app.api.routes import campaigns, creator, references, streams, system
 from app.config import get_settings
 from app.keitaro.factory import get_keitaro_client
 from app.logging_setup import setup_logging
@@ -21,7 +21,6 @@ OPENAPI_TAGS = [
     {"name": "Предпросмотр и Push", "description": "Предпросмотр изменений и отправка потока в Keitaro."},
     {"name": "Создание кампании", "description": "Создание кампании с двумя потоками (публикуется в Keitaro сразу)."},
     {"name": "Справочники", "description": "Домены, группы, источники, поиск офферов."},
-    {"name": "Демо (mock)", "description": "Имитация правок и сбоев Keitaro. Только при KEITARO_MODE=mock."},
 ]
 
 
@@ -64,12 +63,10 @@ def create_app() -> FastAPI:
         logger.info("%s %s -> %s (%.0f мс)", request.method, request.url.path, response.status_code, elapsed_ms)
         return response
 
-    # подключаем маршруты; демонстрационные есть только в режиме mock
+    # подключаем маршруты
     for router in (system.router, campaigns.router, streams.offers_router, streams.push_router,
                    creator.router, references.router):
         app.include_router(router)
-    if settings.keitaro_mode == "mock":
-        app.include_router(mock.router)
 
     return app
 

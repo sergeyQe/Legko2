@@ -20,8 +20,17 @@ STREAM2_NAME = "Поток 2"
 class CreatorService:
     """Создаёт кампанию в Keitaro по шагам и сообщает, что получилось."""
 
-    def __init__(self, keitaro: KeitaroClient) -> None:
+    def __init__(self, keitaro: KeitaroClient, campaign_prefix: str) -> None:
+        # стенд Keitaro общий: новые кампании всегда получают префикс, чужие кампании не трогаем
+        if not campaign_prefix:
+            raise ValueError("CAMPAIGN_PREFIX не задан: без префикса сервис не может отличить свои кампании от чужих")
         self._keitaro = keitaro
+        self._prefix = campaign_prefix
+
+    def full_name(self, name: str) -> str:
+        """Название кампании с префиксом (если пользователь уже написал префикс, второй раз не добавляется)."""
+        clean = normalize_name(name)
+        return clean if clean.casefold().startswith(self._prefix.casefold()) else self._prefix + clean
 
     def create_campaign(
         self,
@@ -37,8 +46,8 @@ class CreatorService:
         Ошибка на шаге создания кампании пробрасывается как есть (ничего не создано).
         Ошибка после неё приводит к CreatePartialError с отчётом; созданное не удаляется.
         """
-        # проверяем ввод до обращений к Keitaro
-        clean_name = normalize_name(name)
+        # проверяем ввод до обращений к Keitaro; к названию добавляется префикс стенда
+        clean_name = normalize_name(self.full_name(name))
         country = normalize_geo(geo)
         alias = make_alias(clean_name)
         offer = self._keitaro.get_offer(offer_id)
@@ -76,6 +85,11 @@ class CreatorService:
 
         name, alias и geo необязательны и нужны только для подробных подписей шагов в отчёте.
         """
+        # повтор разрешён только для наших кампаний (по префиксу названия)
+        campaign = self._keitaro.get_campaign(campaign_id)
+        if not campaign.name.casefold().startswith(self._prefix.casefold()):
+            raise ValidationError("campaign", "Эта кампания создана не нашим сервисом: действия над ней запрещены.")
+
         # если поток с этим оффером уже есть, повторно не создаём
         streams = self._keitaro.get_campaign_streams(campaign_id)
         if not any(not s.offers for s in streams):

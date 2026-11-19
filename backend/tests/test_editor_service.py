@@ -4,7 +4,7 @@ import pytest
 from app.domain.errors import EmptyStreamError, OfferAlreadyInStreamError
 from app.domain.states import OfferState
 from app.keitaro.errors import KeitaroUnreachableError
-from app.keitaro.mock_client import MockKeitaroClient
+from tests.fake_keitaro import FOREIGN_CAMPAIGN_ID, PREFIX, FakeKeitaroClient
 from app.services.editor_service import EditorService
 from app.services.errors import EntityNotFoundError, MergeConflictError
 
@@ -12,13 +12,13 @@ CAMPAIGN = 93212  # кампания со скриншотов: поток 1 б�
 
 
 @pytest.fixture
-def kt() -> MockKeitaroClient:
-    return MockKeitaroClient()
+def kt() -> FakeKeitaroClient:
+    return FakeKeitaroClient()
 
 
 @pytest.fixture
 def svc(session, kt) -> EditorService:
-    return EditorService(session, kt)
+    return EditorService(session, kt, PREFIX)
 
 
 @pytest.fixture
@@ -257,3 +257,24 @@ def test_conflict_resolved_as_keitaro_keeps_offer_with_its_weight(svc, kt, strea
     view = svc.push(stream_id, {"11110:weight_changed_removed": "keitaro"})
     assert kt_weights(kt) == {11109: 30, 11110: 40, 11111: 30}
     assert not view.dirty and not any(o.offer.pinned for o in view.offers)
+
+
+# ---------- защита по префиксу ----------
+
+def test_service_requires_prefix(session, kt):
+    with pytest.raises(ValueError):
+        EditorService(session, kt, "")
+
+
+def test_foreign_campaign_is_not_listed_and_cannot_be_fetched(svc, kt):
+    names = [c.name for c in svc.list_campaigns()]
+    assert "test_other_campaign1" not in names and names == ["test_titov_campaign2", "test_titov_campaign5"]
+    with pytest.raises(EntityNotFoundError):
+        svc.fetch_campaign(FOREIGN_CAMPAIGN_ID)
+    # чужой поток в Keitaro не прочитан и не изменён
+    assert len(kt.get_campaign_streams(FOREIGN_CAMPAIGN_ID)) == 1
+
+
+def test_prefix_check_ignores_case(session, kt):
+    service = EditorService(session, kt, "TEST_TITOV_")
+    assert [c.name for c in service.list_campaigns()] == ["test_titov_campaign2", "test_titov_campaign5"]

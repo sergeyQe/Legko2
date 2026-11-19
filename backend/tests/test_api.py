@@ -7,6 +7,8 @@ from app.config import Settings
 from app.db import get_session
 from app.keitaro.factory import get_keitaro_client
 from app.main import create_app
+from app.models import Campaign, Stream
+from tests.fake_keitaro import FOREIGN_CAMPAIGN_ID, FOREIGN_STREAM_ID
 
 CAMPAIGN_KT_ID = 93212
 
@@ -44,7 +46,7 @@ def assert_error(response, status: int, code: str) -> dict:
 def test_health_and_meta(api):
     assert api.get("/health").json() == {"status": "ok"}
     meta = api.get("/meta").json()
-    assert meta["mode"] == "mock" and meta["version"] and meta["keitaro_url"] == ""
+    assert meta["version"] and meta["campaign_prefix"] == "test_titov_" and "mode" not in meta
 
 
 # ---------- сценарий из видео ----------
@@ -62,7 +64,7 @@ def test_campaign_list_and_fetch(api):
     assert api.get(f"/campaigns/{campaign['id']}").json()["streams"][1]["dirty"] is False
 
 
-def test_add_offer_is_a_draft_and_push_sends_it(api, mock_kt):
+def test_add_offer_is_a_draft_and_push_sends_it(api, fake_kt):
     stream = stream2(api)
     sid = stream["id"]
 
@@ -70,22 +72,22 @@ def test_add_offer_is_a_draft_and_push_sends_it(api, mock_kt):
     assert weights(added) == {11109: 25, 11110: 25, 11111: 25, 11112: 25}
     assert added["dirty"] is True and added["weight_sum"] == 100
     assert next(o for o in added["offers"] if o["offer_id"] == 11112)["state"] == "added"
-    assert len(mock_kt.get_stream(2).offers) == 3  # Keitaro не изменён
+    assert len(fake_kt.get_stream(2).offers) == 3  # Keitaro не изменён
 
     assert api.post(f"/streams/{sid}/cancel").json()["dirty"] is False
 
     api.post(f"/streams/{sid}/offers", json={"offer_id": 11112})
     pushed = api.post(f"/streams/{sid}/push", json={}).json()
     assert pushed["dirty"] is False
-    assert {o.offer_id: o.weight for o in mock_kt.get_stream(2).offers} == {11109: 25, 11110: 25, 11111: 25, 11112: 25}
+    assert {o.offer_id: o.weight for o in fake_kt.get_stream(2).offers} == {11109: 25, 11110: 25, 11111: 25, 11112: 25}
 
 
-def test_remove_restore_and_archive_flow(api, mock_kt):
+def test_remove_restore_and_archive_flow(api, fake_kt):
     sid = stream2(api)["id"]
     removed = api.delete(f"/streams/{sid}/offers/11109").json()
     assert weights(removed)[11109] == 0 and removed["dirty"]
     api.post(f"/streams/{sid}/push", json={})
-    assert {o.offer_id for o in mock_kt.get_stream(2).offers} == {11110, 11111}
+    assert {o.offer_id for o in fake_kt.get_stream(2).offers} == {11110, 11111}
 
     campaign = fetch(api)
     archived = next(o for s in campaign["streams"] for o in s["offers"] if o["offer_id"] == 11109)
@@ -105,22 +107,22 @@ def test_pin_is_kept_and_unpin_works(api):
     assert weights(unpinned) == {11109: 50, 11110: 50, 11111: 0}
 
 
-def test_preview_does_not_change_anything(api, mock_kt):
+def test_preview_does_not_change_anything(api, fake_kt):
     sid = stream2(api)["id"]
     api.post(f"/streams/{sid}/offers", json={"offer_id": 11112})
     preview = api.post(f"/streams/{sid}/preview", json={}).json()
     assert preview["can_push"] is True and preview["merge_items"] == []
     assert {c["kind"] for c in preview["changes"]} == {"add", "change"}
     assert [o["offer_id"] for o in preview["keitaro_offers"]] == [11109, 11110, 11111]
-    assert len(mock_kt.get_stream(2).offers) == 3
+    assert len(fake_kt.get_stream(2).offers) == 3
 
 
 # ---------- merge и ошибки ----------
 
-def test_merge_conflict_flow_over_http(api, mock_kt):
+def test_merge_conflict_flow_over_http(api, fake_kt):
     sid = stream2(api)["id"]
     api.delete(f"/streams/{sid}/offers/11110")
-    assert api.post("/mock/external-change", json={"scenario": "weight_changed", "stream_id": 2, "offer_id": 11110, "weight": 40}).status_code == 200
+    fake_kt.external_weight_changed(2, 11110, 40)
 
     preview = api.post(f"/streams/{sid}/preview", json={}).json()
     assert preview["can_push"] is False
@@ -131,13 +133,13 @@ def test_merge_conflict_flow_over_http(api, mock_kt):
 
     pushed = api.post(f"/streams/{sid}/push", json={"resolutions": {"11110:weight_changed_removed": "keitaro"}})
     assert pushed.status_code == 200
-    assert {o.offer_id: o.weight for o in mock_kt.get_stream(2).offers} == {11109: 30, 11110: 40, 11111: 30}
+    assert {o.offer_id: o.weight for o in fake_kt.get_stream(2).offers} == {11109: 30, 11110: 40, 11111: 30}
 
 
-def test_keitaro_failure_returns_502_and_keeps_draft(api, mock_kt):
+def test_keitaro_failure_returns_502_and_keeps_draft(api, fake_kt):
     sid = stream2(api)["id"]
     api.post(f"/streams/{sid}/offers", json={"offer_id": 11112})
-    api.post("/mock/failure", json={"kind": "network", "target": "push"})
+    fake_kt.fail_next("network", "push")
     body = assert_error(api.post(f"/streams/{sid}/push", json={}), 502, "KEITARO_UNREACHABLE")
     assert body["details"] == {"retryable": True}
     assert api.get(f"/campaigns/{fetch_id(api)}").json()["streams"][1]["dirty"] is True
@@ -154,15 +156,15 @@ def fetch_id(api) -> int:
     ("not_found", 409, "KEITARO_NOT_FOUND"),
     ("rejected", 422, "KEITARO_REJECTED"),
 ])
-def test_keitaro_error_kinds_are_mapped(api, kind, status, code):
+def test_keitaro_error_kinds_are_mapped(api, fake_kt, kind, status, code):
     sid = stream2(api)["id"]
-    api.post("/mock/failure", json={"kind": kind, "target": "push"})
+    fake_kt.fail_next(kind, "push")
     assert_error(api.post(f"/streams/{sid}/push", json={}), status, code)
 
 
-def test_rejected_error_keeps_keitaro_text(api):
+def test_rejected_error_keeps_keitaro_text(api, fake_kt):
     sid = stream2(api)["id"]
-    api.post("/mock/failure", json={"kind": "rejected", "target": "push"})
+    fake_kt.fail_next("rejected", "push")
     body = assert_error(api.post(f"/streams/{sid}/push", json={}), 422, "KEITARO_REJECTED")
     assert body["details"]["keitaro_error"] and body["details"]["keitaro_error"] in body["message"]
 
@@ -226,8 +228,8 @@ def test_error_texts_are_in_russian(api):
     assert missing["details"]["errors"][0]["message"] == "Поле обязательно."
 
 
-def test_retry_stream2_report_uses_detailed_labels_when_context_is_given(api, mock_kt):
-    api.post("/mock/failure", json={"kind": "rejected", "target": "create_stream2"})
+def test_retry_stream2_report_uses_detailed_labels_when_context_is_given(api, fake_kt):
+    fake_kt.fail_next("rejected", "create_stream2")
     created = api.post("/campaign-creator/campaigns", json={"name": "Лето", "geo": "AU", "offer_id": 11112})
     campaign_id = created.json()["details"]["campaign_id"]
     retry = api.post(
@@ -270,7 +272,7 @@ def test_unexpected_error_still_carries_cors_header_for_allowed_origin(session):
 
 def test_references_and_offer_search(api):
     refs = api.get("/references").json()
-    assert "in.posdk.xyz" in [d["name"] for d in refs["domains"]]
+    assert "kylovoa.com" in [d["name"] for d in refs["domains"]]
     assert refs["defaults"] == {"domain_id": 1, "group_id": 1, "source_id": 1, "missing": []}
     assert [o["offer_id"] for o in api.get("/offers/search", params={"q": "11112"}).json()] == [11112]
     assert api.get("/offers/search").json() == []
@@ -282,7 +284,7 @@ def test_create_campaign_and_open_it_in_editor(api):
     })
     assert response.status_code == 201
     report = response.json()
-    assert report["ok"] and report["alias"] == "test-kampaniya"
+    assert report["ok"] and report["alias"] == "test-titov-test-kampaniya"
     assert [s["status"] for s in report["steps"]] == ["ok", "ok", "ok"]
 
     created = next(c for c in api.get("/campaigns").json() if c["keitaro_id"] == report["campaign_id"])
@@ -306,8 +308,8 @@ def test_create_campaign_validation_errors(api):
         assert error["details"]["field"] == field
 
 
-def test_partial_creation_returns_steps_and_can_be_retried(api, mock_kt):
-    api.post("/mock/failure", json={"kind": "rejected", "target": "create_stream2"})
+def test_partial_creation_returns_steps_and_can_be_retried(api, fake_kt):
+    fake_kt.fail_next("rejected", "create_stream2")
     response = api.post("/campaign-creator/campaigns", json={"name": "Частично", "geo": "AU", "offer_id": 11112})
     body = assert_error(response, 502, "CREATE_PARTIAL")
     assert [s["status"] for s in body["details"]["steps"]] == ["ok", "ok", "failed"]
@@ -317,38 +319,59 @@ def test_partial_creation_returns_steps_and_can_be_retried(api, mock_kt):
 
     retry = api.post(f"/campaign-creator/campaigns/{campaign_id}/retry-stream2", json={"offer_id": 11112})
     assert retry.status_code == 200 and retry.json()["ok"] is True
-    assert [s.name for s in mock_kt.get_campaign_streams(campaign_id)] == ["Поток 1", "Поток 2"]
+    assert [s.name for s in fake_kt.get_campaign_streams(campaign_id)] == ["Поток 1", "Поток 2"]
 
 
-# ---------- демо-маршруты ----------
+# ---------- защита по префиксу кампаний ----------
 
-def test_mock_state_and_reset(api, mock_kt):
-    api.post("/mock/external-change", json={"scenario": "offer_added", "stream_id": 2, "offer_id": 11120, "weight": 20})
-    assert 11120 in [o["offer_id"] for s in api.get("/mock/state").json()["streams"] for o in s["offers"]]
-    api.post("/mock/failure", json={"kind": "network", "target": "fetch", "times": 3})
-    assert api.get("/mock/state").json()["failures"][0]["times"] == 3
-    api.post("/mock/reset")
-    state = api.get("/mock/state").json()
-    assert state["failures"] == [] and 11120 not in [o["offer_id"] for s in state["streams"] for o in s["offers"]]
+def test_demo_routes_do_not_exist(api):
+    for method, path in (("post", "/mock/reset"), ("get", "/mock/state"), ("post", "/mock/failure"), ("post", "/mock/external-change")):
+        assert getattr(api, method)(path).status_code == 404
+    assert not any(path.startswith("/mock") for path in api.get("/openapi.json").json()["paths"])
 
 
-def test_mock_reset_also_clears_our_copy_of_the_data(api):
-    sid = stream2(api)["id"]
-    api.post(f"/streams/{sid}/offers", json={"offer_id": 11112})
-    api.post(f"/streams/{sid}/push", json={})
+def test_foreign_campaigns_are_invisible_and_untouchable(api, fake_kt, session):
+    # в списке только кампании с префиксом; чужая (test_other_...) не показана
+    assert [c["name"] for c in api.get("/campaigns").json()] == ["test_titov_campaign2", "test_titov_campaign5"]
 
-    assert api.post("/mock/reset").status_code == 200
-    summary = next(c for c in api.get("/campaigns").json() if c["keitaro_id"] == CAMPAIGN_KT_ID)
-    assert summary["fetched"] is False and summary["dirty"] is False
-    # после повторной загрузки поток снова как на скриншотах: 33/33/34, без лишних удалённых офферов
-    stream = stream2(api)
-    assert weights(stream) == {11109: 33, 11110: 33, 11111: 34} and not stream["dirty"]
+    # чужая кампания, попавшая в нашу копию (например, от прежнего запуска), недоступна и убирается из копии
+    foreign = Campaign(keitaro_id=FOREIGN_CAMPAIGN_ID, name="test_other_campaign1", alias="x")
+    foreign.streams.append(Stream(keitaro_id=FOREIGN_STREAM_ID, name="Чужой поток", position=1))
+    session.add(foreign)
+    session.commit()
+    campaign_id, stream_id = foreign.id, foreign.streams[0].id
+
+    assert_error(api.get(f"/campaigns/{campaign_id}"), 404, "NOT_FOUND")
+    assert_error(api.post(f"/campaigns/{campaign_id}/fetch"), 404, "NOT_FOUND")
+    assert_error(api.post(f"/streams/{stream_id}/offers", json={"offer_id": 11112}), 404, "NOT_FOUND")
+    assert_error(api.delete(f"/streams/{stream_id}/offers/11115"), 404, "NOT_FOUND")
+    assert_error(api.post(f"/streams/{stream_id}/cancel"), 404, "NOT_FOUND")
+    assert_error(api.post(f"/streams/{stream_id}/preview", json={}), 404, "NOT_FOUND")
+    assert_error(api.post(f"/streams/{stream_id}/push", json={}), 404, "NOT_FOUND")
+
+    api.get("/campaigns")  # показ списка убирает чужую кампанию из нашей копии
+    session.expire_all()
+    assert session.get(Campaign, campaign_id) is None
+    # в самом Keitaro чужой поток не тронут
+    assert [o.offer_id for o in fake_kt.get_stream(FOREIGN_STREAM_ID).offers] == [11115]
 
 
-def test_mock_routes_are_absent_in_real_mode(monkeypatch):
-    monkeypatch.setattr("app.main.get_settings", lambda: Settings(keitaro_mode="real", keitaro_url="https://x", keitaro_api_key="k"))
-    app = create_app()
-    assert not any(path.startswith("/mock") for path in app.openapi()["paths"])
+def test_created_campaign_gets_the_prefix_automatically(api, fake_kt):
+    report = api.post("/campaign-creator/campaigns", json={"name": "Лето", "geo": "AU", "offer_id": 11112}).json()
+    assert report["name"] == "test_titov_Лето" and report["alias"] == "test-titov-leto"
+    assert fake_kt.get_campaign(report["campaign_id"]).name == "test_titov_Лето"
+
+    # префикс, который пользователь уже написал сам, второй раз не добавляется
+    again = api.post("/campaign-creator/campaigns", json={"name": "test_titov_Осень", "geo": "AU", "offer_id": 11112}).json()
+    assert again["name"] == "test_titov_Осень"
+    # созданная кампания видна в списке, чужая нет
+    assert "test_titov_Лето" in [c["name"] for c in api.get("/campaigns").json()]
+
+
+def test_retry_stream2_is_refused_for_foreign_campaign(api, fake_kt):
+    response = api.post(f"/campaign-creator/campaigns/{FOREIGN_CAMPAIGN_ID}/retry-stream2", json={"offer_id": 11112})
+    assert_error(response, 422, "VALIDATION")
+    assert len(fake_kt.get_campaign_streams(FOREIGN_CAMPAIGN_ID)) == 1  # поток не добавлен
 
 
 # ---------- Swagger ----------

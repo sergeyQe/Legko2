@@ -147,7 +147,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         code, message = generic.get(exc.status_code, ("HTTP_ERROR", "Не удалось выполнить запрос."))
         detail = exc.detail if isinstance(exc.detail, str) else ""
         if detail and detail not in ("Not Found", "Method Not Allowed"):
-            message = detail  # наш собственный текст (например, у демо-маршрутов вне режима mock)
+            message = detail  # наш собственный текст ошибки
         return _json(exc.status_code, error_body(code, message))
 
     @app.exception_handler(Exception)

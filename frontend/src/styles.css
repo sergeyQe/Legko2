@@ -33,7 +33,6 @@
   --s8: #e39f86;
   --seg-fg: #1d2b24;
   --seg-sh: none;
-  --demo-bg: #edf1eb;
   --f-text: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-head: "Manrope", "Inter", system-ui, sans-serif;
   --r1: 16px;
@@ -75,7 +74,6 @@
     --s7: #6db8b8;
     --s8: #d38f77;
     --seg-fg: #0f1a14;
-    --demo-bg: #101512;
     color-scheme: dark;
   }
 }
@@ -112,7 +110,6 @@
   --s7: #6db8b8;
   --s8: #d38f77;
   --seg-fg: #0f1a14;
-  --demo-bg: #101512;
   color-scheme: dark;
 }
 
@@ -921,31 +918,6 @@ details.same {
 }
 details.same summary {
   cursor: pointer;
-}
-
-/* ---------- демо-панель (только режим mock) ---------- */
-.demo {
-  margin-bottom: 12px;
-  padding: 10px 14px;
-  background: var(--demo-bg);
-  border: 1px dashed var(--line);
-  border-radius: var(--r2);
-  font-size: 13px;
-}
-.demo summary {
-  cursor: pointer;
-  color: var(--fg);
-  font-weight: 500;
-  min-height: 24px;
-}
-.demo[open] summary {
-  margin-bottom: 8px;
-}
-.demo-body {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  align-items: center;
 }
 
 @media (max-width: 860px) {

@@ -37,6 +37,18 @@ def stream_json(stream_id=2):
     }
 
 
+def test_get_campaign_reads_one_campaign():
+    client = make_client(lambda request: httpx.Response(200, json={"id": 93212, "name": "test_titov_campaign1", "alias": "abc"}))
+    campaign = client.get_campaign(93212)
+    assert (campaign.campaign_id, campaign.name, campaign.alias) == (93212, "test_titov_campaign1", "abc")
+
+
+def test_get_campaign_not_found_is_translated():
+    client = make_client(lambda request: httpx.Response(404, json={"error": "Entity not found"}))
+    with pytest.raises(KeitaroNotFoundError):
+        client.get_campaign(1)
+
+
 def test_streams_are_mapped_with_offer_names_and_only_active_offers():
     seen = []
 
@@ -87,6 +99,14 @@ def test_error_statuses_are_translated(status, error):
         client.get_stream(2)
     assert info.value.message == "из Keitaro"
     assert info.value.status_code == status
+
+
+def test_field_validation_errors_are_joined_into_text():
+    client = make_client(lambda request: httpx.Response(
+        422, json={"name": ["Name has already been used in the archive"]}))
+    with pytest.raises(KeitaroRejectedError) as info:
+        client.get_stream(2)
+    assert info.value.message == "name: Name has already been used in the archive"
 
 
 def test_error_without_json_body_uses_raw_text():

@@ -4,7 +4,7 @@ import pytest
 from app.config import Settings
 from app.domain.errors import ValidationError
 from app.keitaro.errors import KeitaroRejectedError, KeitaroUnreachableError
-from app.keitaro.mock_client import MockKeitaroClient
+from tests.fake_keitaro import FOREIGN_CAMPAIGN_ID, PREFIX, FakeKeitaroClient
 from app.keitaro.models import NewCampaign
 from app.services.creator_service import CreatorService
 from app.services.errors import CreatePartialError
@@ -12,18 +12,18 @@ from app.services.reference_service import ReferenceService
 
 
 @pytest.fixture
-def kt() -> MockKeitaroClient:
-    return MockKeitaroClient()
+def kt() -> FakeKeitaroClient:
+    return FakeKeitaroClient()
 
 
 @pytest.fixture
 def creator(kt) -> CreatorService:
-    return CreatorService(kt)
+    return CreatorService(kt, PREFIX)
 
 
 def test_create_campaign_makes_two_streams(creator, kt):
     report = creator.create_campaign("Тест кампания", "au", 11112, domain_id=1, group_id=1, source_id=1)
-    assert report.ok and report.alias == "test-kampaniya"
+    assert report.ok and report.alias == "test-titov-test-kampaniya"
     assert [s.status for s in report.steps] == ["ok", "ok", "ok"]
     streams = kt.get_campaign_streams(report.campaign_id)
     assert [s.name for s in streams] == ["Поток 1", "Поток 2"]
@@ -84,7 +84,7 @@ def test_failure_on_stream1_stops_before_stream2(creator, kt):
 
 
 def test_retry_requires_stream1_to_exist(creator, kt):
-    campaign = kt.create_campaign(NewCampaign("Пустая", "empty"))
+    campaign = kt.create_campaign(NewCampaign(PREFIX + "Пустая", "empty"))
     with pytest.raises(ValidationError) as info:
         creator.retry_stream2(campaign.campaign_id, 11112)
     assert info.value.field == "campaign"
@@ -118,7 +118,7 @@ def test_retry_that_fails_again_reports_partial(creator, kt):
 
 
 def test_defaults_are_found_by_name_ignoring_case(kt):
-    refs = ReferenceService(kt, Settings(default_domain="IN.POSDK.XYZ", default_group="fortests", default_source="FORTESTS"))
+    refs = ReferenceService(kt, Settings(default_domain="KYLOVOA.COM", default_group="fortests", default_source="FORTESTS"))
     defaults = refs.defaults()
     assert (defaults.domain_id, defaults.group_id, defaults.source_id) == (1, 1, 1)
     assert defaults.missing == []
@@ -135,3 +135,24 @@ def test_reference_lists_and_offer_search(kt):
     refs = ReferenceService(kt, Settings())
     assert refs.domains() and refs.groups() and refs.sources()
     assert [o.offer_id for o in refs.search_offers("11112")] == [11112]
+
+
+# ---------- префикс стенда ----------
+
+def test_service_requires_prefix(kt):
+    with pytest.raises(ValueError):
+        CreatorService(kt, "")
+
+
+def test_name_gets_prefix_once(creator, kt):
+    first = creator.create_campaign("Лето", "AU", 11112)
+    assert first.name == "test_titov_Лето" and kt.get_campaign(first.campaign_id).name == "test_titov_Лето"
+    second = creator.create_campaign("TEST_TITOV_Осень", "AU", 11112)
+    assert second.name == "TEST_TITOV_Осень"  # префикс уже есть: регистр сохраняется, второй раз не добавляется
+
+
+def test_retry_is_refused_for_foreign_campaign(creator, kt):
+    with pytest.raises(ValidationError) as info:
+        creator.retry_stream2(FOREIGN_CAMPAIGN_ID, 11112)
+    assert info.value.field == "campaign"
+    assert len(kt.get_campaign_streams(FOREIGN_CAMPAIGN_ID)) == 1

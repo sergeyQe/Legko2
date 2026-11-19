@@ -15,8 +15,8 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("api client", () => {
   it("возвращает разобранный JSON", async () => {
-    mockFetch(new Response(JSON.stringify({ mode: "mock", version: "1", keitaro_url: "" }), { status: 200 }));
-    expect((await api.meta()).mode).toBe("mock");
+    mockFetch(new Response(JSON.stringify({ version: "1", keitaro_url: "https://kt", campaign_prefix: "test_titov_" }), { status: 200 }));
+    expect((await api.meta()).campaign_prefix).toBe("test_titov_");
   });
 
   it("отправляет тело запроса как JSON", async () => {

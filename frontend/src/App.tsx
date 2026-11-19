@@ -1,9 +1,8 @@
-/** Каркас приложения: шапка, навигация, тема, демо-панель и выбор страницы по адресу. */
+/** Каркас приложения: шапка, навигация, тема и выбор страницы по адресу. */
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "./api/client";
 import type { Meta } from "./api/types";
-import { DemoPanel } from "./components/DemoPanel";
 import { useRoute } from "./lib/route";
 import { themeLabel, useTheme } from "./lib/theme";
 import { CampaignEditorPage } from "./pages/CampaignEditorPage";
@@ -14,7 +13,6 @@ export function App() {
   const [route, navigate] = useRoute();
   const [theme, cycleTheme] = useTheme();
   const [meta, setMeta] = useState<Meta | null>(null);
-  const [epoch, setEpoch] = useState(0); // меняется после сброса демо: страницы загружаются заново
 
   useEffect(() => {
     api.meta().then(setMeta).catch(() => setMeta(null));
@@ -34,16 +32,6 @@ export function App() {
 
   return (
     <div className="app">
-      {meta?.mode === "mock" && (
-        <DemoPanel
-          onReset={() => {
-            // после сброса ID кампаний меняются: из редактора уходим к списку (он загрузится заново),
-            // на других страницах просто перезагружаем данные
-            if (route.name === "campaign") navigate("/campaigns");
-            else setEpoch((n) => n + 1);
-          }}
-        />
-      )}
       <div className="shell">
         <header className="top">
           <span className="brand">Adrobot · Keitaro</span>
@@ -60,14 +48,14 @@ export function App() {
           </button>
         </header>
 
-        <main className="main" key={epoch}>
+        <main className="main">
           {route.name === "campaigns" && (
             <CampaignListPage onOpen={(id) => navigate(`/campaign/${id}`)} onCreate={() => navigate("/create")} />
           )}
           {route.name === "campaign" && (
             <CampaignEditorPage campaignId={route.id} keitaroUrl={meta?.keitaro_url ?? ""} onBack={() => navigate("/campaigns")} />
           )}
-          {route.name === "create" && <CreateCampaignPage onOpenCampaign={openCampaignByKeitaroId} />}
+          {route.name === "create" && <CreateCampaignPage onOpenCampaign={openCampaignByKeitaroId} campaignPrefix={meta?.campaign_prefix ?? ""} />}
         </main>
       </div>
     </div>

@@ -11,7 +11,7 @@ const TOAST_MS = 6000; // сколько показываем сообщение
 
 interface Props {
   campaignId: number;
-  keitaroUrl: string; // адрес Keitaro (пусто в режиме mock)
+  keitaroUrl: string; // адрес Keitaro
   onBack: () => void; // вернуться к списку кампаний
 }
 
@@ -166,15 +166,9 @@ export function CampaignEditorPage({ campaignId, keitaroUrl, onBack }: Props) {
           <button className="btn" disabled={busy} onClick={fetchStreams}>
             Загрузить потоки из KT
           </button>
-          {keitaroUrl ? (
-            <a className="btn" href={`${keitaroUrl.replace(/\/+$/, "")}/admin/`} target="_blank" rel="noreferrer">
-              Кампания в Keitaro <span aria-hidden="true">↗</span>
-            </a>
-          ) : (
-            <button className="btn" disabled title="В режиме mock Keitaro нет: ссылка появится при подключении настоящего Keitaro.">
-              Кампания в Keitaro <span aria-hidden="true">↗</span>
-            </button>
-          )}
+          <a className="btn" href={`${keitaroUrl.replace(/\/+$/, "")}/admin/`} target="_blank" rel="noreferrer">
+            Кампания в Keitaro <span aria-hidden="true">↗</span>
+          </a>
         </div>
       </div>
 

@@ -69,6 +69,18 @@ describe("создание кампании", () => {
     expect(screen.getByText(/Алиас: test-kampaniya/)).toBeInTheDocument();
   });
 
+  it("показывает итоговое название с префиксом стенда и не дублирует его", async () => {
+    const user = userEvent.setup();
+    render(<CreateCampaignPage onOpenCampaign={vi.fn()} campaignPrefix="test_titov_" />);
+    await user.type(screen.getByLabelText("Название кампании"), "campaign7");
+    expect(screen.getByText("test_titov_campaign7")).toBeInTheDocument();
+    expect(screen.getByText(/Алиас: test-titov-campaign7/)).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Название кампании"));
+    await user.type(screen.getByLabelText("Название кампании"), "TEST_titov_x");
+    expect(screen.getByText("TEST_titov_x")).toBeInTheDocument();
+  });
+
   it("неверный код страны подсвечивается", async () => {
     const user = userEvent.setup();
     render(<CreateCampaignPage onOpenCampaign={vi.fn()} />);

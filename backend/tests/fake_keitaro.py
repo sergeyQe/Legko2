@@ -1,6 +1,6 @@
-"""Заглушка Keitaro с данными из скриншотов. Основной режим работы при отсутствии ключа Keitaro.
+"""Тестовый двойник Keitaro: данные в памяти, сбои и правки «со стороны». Используется только в автотестах.
 
-Умеет имитировать сбои и правки «со стороны» Keitaro для демонстрации и тестов (см. маршруты /mock/*).
+В продукте клиента-заглушки нет: приложение всегда работает с настоящим Keitaro.
 """
 import copy
 import logging
@@ -36,7 +36,10 @@ _CATALOG = [
     CatalogOffer(11115, "Gelo Pro [JOINT-PL_0310]", "Польша"),
     CatalogOffer(11120, "Vitalis [HEART-DE_0042]", "Германия"),
 ]
-_DOMAINS = [KtReference(1, "in.posdk.xyz"), KtReference(2, "go.demo-track.net"), KtReference(3, "click.example-kt.com")]
+PREFIX = "test_titov_"  # префикс «наших» кампаний в тестах (как CAMPAIGN_PREFIX в настройках)
+FOREIGN_CAMPAIGN_ID = 93999  # чужая кампания: сервис не должен её показывать и менять
+FOREIGN_STREAM_ID = 9
+_DOMAINS = [KtReference(1, "kylovoa.com"), KtReference(2, "go.demo-track.net"), KtReference(3, "click.example-kt.com")]
 _GROUPS = [KtReference(1, "FORTESTS"), KtReference(2, "Основные"), KtReference(3, "Новые гео")]
 _SOURCES = [KtReference(1, "FORTESTS"), KtReference(2, "Facebook"), KtReference(3, "Google Ads")]
 
@@ -50,7 +53,7 @@ class _Failure:
     times: int  # сколько вызовов подряд завершатся ошибкой
 
 
-class MockKeitaroClient(KeitaroClient):
+class FakeKeitaroClient(KeitaroClient):
     """Хранит кампании, потоки и офферы в памяти процесса."""
 
     def __init__(self) -> None:
@@ -63,8 +66,9 @@ class MockKeitaroClient(KeitaroClient):
         """Возвращает данные к исходным (по скриншотам) и снимает все запланированные сбои."""
         with self._lock:
             self._campaigns: dict[int, KtCampaign] = {
-                93212: KtCampaign(93212, "campaign 2", "campaign-2"),
-                93215: KtCampaign(93215, "campaign 5", "campaign-5"),
+                93212: KtCampaign(93212, PREFIX + "campaign2", "test-titov-campaign2"),
+                93215: KtCampaign(93215, PREFIX + "campaign5", "test-titov-campaign5"),
+                FOREIGN_CAMPAIGN_ID: KtCampaign(FOREIGN_CAMPAIGN_ID, "test_other_campaign1", "test-other-campaign1"),
             }
             self._streams: dict[int, KtStream] = {
                 1: KtStream(1, 93212, "Поток 1", 1, []),  # поток-редирект без офферов
@@ -77,11 +81,14 @@ class MockKeitaroClient(KeitaroClient):
                     KtOfferState(11113, "Dermia [SLIM-FR_0201]", "Франция", 50),
                     KtOfferState(11114, "Keto Drive [KETO-IT_0087]", "Италия", 50),
                 ]),
+                FOREIGN_STREAM_ID: KtStream(FOREIGN_STREAM_ID, FOREIGN_CAMPAIGN_ID, "Чужой поток", 1, [
+                    KtOfferState(11115, "Gelo Pro [JOINT-PL_0310]", "Польша", 100),
+                ]),
             }
             self._failures: list[_Failure] = []
             self._next_campaign_id = 93300
             self._next_stream_id = 100
-            logger.info("[mock] данные Keitaro сброшены")
+            logger.info("[fake] данные Keitaro сброшены")
 
     def fail_next(self, kind: str, target: str, times: int = 1) -> None:
         """Планирует сбой: следующие times вызовов операции target завершатся ошибкой вида kind."""
@@ -93,7 +100,7 @@ class MockKeitaroClient(KeitaroClient):
             raise ValueError("Число вызовов должно быть не меньше 1")
         with self._lock:
             self._failures.append(_Failure(kind, target, times))
-        logger.info("[mock] запланирован сбой %s на операции %s, раз: %s", kind, target, times)
+        logger.info("[fake] запланирован сбой %s на операции %s, раз: %s", kind, target, times)
 
     def external_offer_added(self, stream_id: int, offer_id: int, weight: int) -> None:
         """Имитирует: в Keitaro вручную добавили оффер в поток."""
@@ -103,7 +110,7 @@ class MockKeitaroClient(KeitaroClient):
             if any(o.offer_id == offer_id for o in stream.offers):
                 raise KeitaroRejectedError(f"Offer {offer_id} is already in the stream")
             stream.offers.append(KtOfferState(offer_id, catalog.name, catalog.geo, weight))
-        logger.info("[mock] правка в Keitaro: в поток %s добавлен оффер %s (%s%%)", stream_id, offer_id, weight)
+        logger.info("[fake] правка в Keitaro: в поток %s добавлен оффер %s (%s%%)", stream_id, offer_id, weight)
 
     def external_weight_changed(self, stream_id: int, offer_id: int, weight: int) -> None:
         """Имитирует: в Keitaro вручную изменили вес оффера в потоке."""
@@ -115,7 +122,7 @@ class MockKeitaroClient(KeitaroClient):
                     break
             else:
                 raise KeitaroNotFoundError(f"Offer {offer_id} not in stream", entity="offer", entity_id=offer_id)
-        logger.info("[mock] правка в Keitaro: у оффера %s в потоке %s вес %s%%", offer_id, stream_id, weight)
+        logger.info("[fake] правка в Keitaro: у оффера %s в потоке %s вес %s%%", offer_id, stream_id, weight)
 
     def external_offer_removed(self, stream_id: int, offer_id: int) -> None:
         """Имитирует: в Keitaro вручную удалили оффер из потока."""
@@ -125,7 +132,7 @@ class MockKeitaroClient(KeitaroClient):
             stream.offers = [o for o in stream.offers if o.offer_id != offer_id]
             if len(stream.offers) == before:
                 raise KeitaroNotFoundError(f"Offer {offer_id} not in stream", entity="offer", entity_id=offer_id)
-        logger.info("[mock] правка в Keitaro: из потока %s удалён оффер %s", stream_id, offer_id)
+        logger.info("[fake] правка в Keitaro: из потока %s удалён оффер %s", stream_id, offer_id)
 
     def describe(self) -> dict:
         """Текущее состояние заглушки для отладки (потоки, офферы, запланированные сбои)."""
@@ -148,7 +155,7 @@ class MockKeitaroClient(KeitaroClient):
             if failure.target == target and failure.times > 0:
                 failure.times -= 1
                 self._failures = [f for f in self._failures if f.times > 0]
-                logger.info("[mock] сбой %s на операции %s", failure.kind, target)
+                logger.info("[fake] сбой %s на операции %s", failure.kind, target)
                 raise self._build_error(failure.kind)
 
     @staticmethod
@@ -189,6 +196,13 @@ class MockKeitaroClient(KeitaroClient):
         with self._lock:
             return list(self._campaigns.values())
 
+    def get_campaign(self, campaign_id: int) -> KtCampaign:
+        with self._lock:
+            campaign = self._campaigns.get(campaign_id)
+            if campaign is None:
+                raise KeitaroNotFoundError(f"Campaign {campaign_id} not found", entity="campaign", entity_id=campaign_id)
+            return campaign
+
     def get_campaign_streams(self, campaign_id: int) -> list[KtStream]:
         with self._lock:
             self._maybe_fail("fetch")
@@ -216,7 +230,7 @@ class MockKeitaroClient(KeitaroClient):
                 catalog = self._catalog_offer(push.offer_id)
                 new_offers.append(KtOfferState(push.offer_id, catalog.name, catalog.geo, push.share))
             stream.offers = new_offers
-            logger.info("[mock] поток %s: офферы заменены (%s шт.)", stream_id, len(new_offers))
+            logger.info("[fake] поток %s: офферы заменены (%s шт.)", stream_id, len(new_offers))
             return self._copy(stream)
 
     def search_offers(self, query: str) -> list[CatalogOffer]:
@@ -255,7 +269,7 @@ class MockKeitaroClient(KeitaroClient):
             self._next_campaign_id += 1
             created = KtCampaign(self._next_campaign_id, campaign.name, campaign.alias)
             self._campaigns[created.campaign_id] = created
-            logger.info("[mock] создана кампания %s (%s)", created.campaign_id, created.alias)
+            logger.info("[fake] создана кампания %s (%s)", created.campaign_id, created.alias)
             return created
 
     def create_country_redirect_stream(self, campaign_id: int, name: str, country_code: str, url: str) -> KtStream:
@@ -281,5 +295,5 @@ class MockKeitaroClient(KeitaroClient):
         position = 1 + max((s.position for s in self._streams.values() if s.campaign_id == campaign_id), default=0)
         stream = KtStream(self._next_stream_id, campaign_id, name, position, offers)
         self._streams[stream.stream_id] = stream
-        logger.info("[mock] создан поток %s в кампании %s", stream.stream_id, campaign_id)
+        logger.info("[fake] создан поток %s в кампании %s", stream.stream_id, campaign_id)
         return self._copy(stream)

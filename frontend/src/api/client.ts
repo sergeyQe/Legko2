@@ -4,8 +4,6 @@ import type {
   CampaignSummary,
   CreateCampaignBody,
   CreateReport,
-  ExternalChangeBody,
-  FailureBody,
   Meta,
   OfferSearchResult,
   Preview,
@@ -88,7 +86,4 @@ export const api = {
       alias,
       geo,
     }),
-  mockExternalChange: (body: ExternalChangeBody) => request<{ status: string }>("POST", "/mock/external-change", body),
-  mockFailure: (body: FailureBody) => request<{ status: string }>("POST", "/mock/failure", body),
-  mockReset: () => request<{ status: string }>("POST", "/mock/reset"),
 };

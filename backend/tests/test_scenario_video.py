@@ -12,13 +12,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401
+from app.config import Settings, get_settings
 from app.db import Base, get_session
 from app.keitaro.factory import get_keitaro_client
 from app.main import create_app
 
 
 @pytest.fixture(params=["sqlite", "postgres"])
-def scenario(request, mock_kt):
+def scenario(request, fake_kt):
     """HTTP-клиент на выбранной БД и заглушка Keitaro."""
     if request.param == "sqlite":
         engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
@@ -33,7 +34,8 @@ def scenario(request, mock_kt):
     with Session(engine, expire_on_commit=False) as session:
         app = create_app()
         app.dependency_overrides[get_session] = lambda: session
-        app.dependency_overrides[get_keitaro_client] = lambda: mock_kt
+        app.dependency_overrides[get_keitaro_client] = lambda: fake_kt
+        app.dependency_overrides[get_settings] = lambda: Settings(_env_file=None, campaign_prefix="test_titov_")
         with TestClient(app) as client:
             yield client
     Base.metadata.drop_all(engine)
@@ -48,11 +50,11 @@ def states(stream: dict) -> dict[int, str]:
     return {o["offer_id"]: o["state"] for o in stream["offers"]}
 
 
-def kt_weights(mock_kt) -> dict[int, int]:
-    return {o.offer_id: o.weight for o in mock_kt.get_stream(2).offers}
+def kt_weights(fake_kt) -> dict[int, int]:
+    return {o.offer_id: o.weight for o in fake_kt.get_stream(2).offers}
 
 
-def test_full_scenario_from_the_video(scenario, mock_kt):
+def test_full_scenario_from_the_video(scenario, fake_kt):
     api = scenario
 
     # 1. Загрузка: два потока, поток без офферов виден пустым, у второго 33/33/34
@@ -66,12 +68,12 @@ def test_full_scenario_from_the_video(scenario, mock_kt):
     # 2. Добавление: веса 25% x 4, поток жёлтый, Keitaro без изменений
     added = api.post(f"/streams/{sid}/offers", json={"offer_id": 11112}).json()
     assert weights(added) == {11109: 25, 11110: 25, 11111: 25, 11112: 25} and added["dirty"] is True
-    assert kt_weights(mock_kt) == {11109: 33, 11110: 33, 11111: 34}
+    assert kt_weights(fake_kt) == {11109: 33, 11110: 33, 11111: 34}
 
     # 3. Обновление страницы: черновик остался, Keitaro по-прежнему с тремя офферами
     reloaded = api.get(f"/campaigns/{campaign_id}").json()["streams"][1]
     assert reloaded["dirty"] is True and len(reloaded["offers"]) == 4
-    assert len(mock_kt.get_stream(2).offers) == 3
+    assert len(fake_kt.get_stream(2).offers) == 3
 
     # 4. Cancel: добавленный оффер исчез, поток снова белый
     cancelled = api.post(f"/streams/{sid}/cancel").json()
@@ -81,7 +83,7 @@ def test_full_scenario_from_the_video(scenario, mock_kt):
     api.post(f"/streams/{sid}/offers", json={"offer_id": 11112})
     pushed = api.post(f"/streams/{sid}/push", json={}).json()
     assert pushed["dirty"] is False
-    assert kt_weights(mock_kt) == {11109: 25, 11110: 25, 11111: 25, 11112: 25}
+    assert kt_weights(fake_kt) == {11109: 25, 11110: 25, 11111: 25, 11112: 25}
 
     # 6. Remove: оффер серый с 0%, у остальных 33/33/34
     removed = api.delete(f"/streams/{sid}/offers/11112").json()
@@ -90,23 +92,23 @@ def test_full_scenario_from_the_video(scenario, mock_kt):
 
     # 7. Push: оффер исчез из Keitaro, у нас остался в архиве (Removed)
     pushed = api.post(f"/streams/{sid}/push", json={}).json()
-    assert 11112 not in kt_weights(mock_kt) and states(pushed)[11112] == "removed" and not pushed["dirty"]
+    assert 11112 not in kt_weights(fake_kt) and states(pushed)[11112] == "removed" and not pushed["dirty"]
 
     # 8. Bring Back и Push: оффер вернулся в Keitaro
     back = api.post(f"/streams/{sid}/offers/11112/restore").json()
     assert back["dirty"] is True and states(back)[11112] == "added"
     api.post(f"/streams/{sid}/push", json={})
-    assert set(kt_weights(mock_kt)) == {11109, 11110, 11111, 11112}
+    assert set(kt_weights(fake_kt)) == {11109, 11110, 11111, 11112}
 
     # 9. Оффер удалили прямо в Keitaro: после Fetch он Removed с возможностью вернуть
-    mock_kt.external_offer_removed(2, 11112)
+    fake_kt.external_offer_removed(2, 11112)
     fetched = api.post(f"/campaigns/{campaign_id}/fetch").json()["streams"][1]
     assert states(fetched)[11112] == "removed"
     # в Keitaro осталось 75%: доли пересчитаны до 100%, поток требует отправки, об этом есть сообщение
     assert fetched["weight_sum"] == 100 and fetched["dirty"] is True
     assert any("сумма долей 75%" in note for note in fetched["notes"])
     api.post(f"/streams/{sid}/push", json={})
-    assert kt_weights(mock_kt) == {11109: 33, 11110: 33, 11111: 34}
+    assert kt_weights(fake_kt) == {11109: 33, 11110: 33, 11111: 34}
 
     # 10. Пин: закреплённый вес держится при добавлении и удалении, остальные делят остаток
     api.post(f"/streams/{sid}/offers/11112/restore")
@@ -118,11 +120,11 @@ def test_full_scenario_from_the_video(scenario, mock_kt):
     others = [w for oid, w in weights(after_remove).items() if oid not in (11109, 11112)]
     assert sum(others) + pinned_weight == 100
     final = api.post(f"/streams/{sid}/push", json={}).json()
-    assert kt_weights(mock_kt)[11109] == pinned_weight and sum(kt_weights(mock_kt).values()) == 100
+    assert kt_weights(fake_kt)[11109] == pinned_weight and sum(kt_weights(fake_kt).values()) == 100
     assert final["weight_sum"] == 100 and final["dirty"] is False
 
 
-def test_parallel_fetch_of_the_same_campaign_does_not_fail(mock_kt):
+def test_parallel_fetch_of_the_same_campaign_does_not_fail(fake_kt):
     """Двойной клик или две вкладки: одновременные загрузки одной кампании обе проходят (только PostgreSQL).
 
     На каждый запрос открывается своя сессия, как в работающем приложении.
@@ -142,7 +144,8 @@ def test_parallel_fetch_of_the_same_campaign_does_not_fail(mock_kt):
 
     app = create_app()
     app.dependency_overrides[get_session] = session_per_request
-    app.dependency_overrides[get_keitaro_client] = lambda: mock_kt
+    app.dependency_overrides[get_keitaro_client] = lambda: fake_kt
+    app.dependency_overrides[get_settings] = lambda: Settings(_env_file=None, campaign_prefix="test_titov_")
     try:
         with TestClient(app) as client:
             campaign_id = next(c["id"] for c in client.get("/campaigns").json() if c["keitaro_id"] == 93212)
@@ -169,23 +172,23 @@ def test_parallel_fetch_of_the_same_campaign_does_not_fail(mock_kt):
         engine.dispose()
 
 
-def test_scenario_merge_and_error_over_http(scenario, mock_kt):
+def test_scenario_merge_and_error_over_http(scenario, fake_kt):
     api = scenario
     campaign_id = next(c["id"] for c in api.get("/campaigns").json() if c["keitaro_id"] == 93212)
     sid = api.post(f"/campaigns/{campaign_id}/fetch").json()["streams"][1]["id"]
 
     # правка в Keitaro и конфликт: оффер убран у нас, а там изменён вес
     api.delete(f"/streams/{sid}/offers/11110")
-    mock_kt.external_weight_changed(2, 11110, 40)
-    mock_kt.external_offer_added(2, 11120, 20)
+    fake_kt.external_weight_changed(2, 11110, 40)
+    fake_kt.external_offer_added(2, 11120, 20)
     preview = api.post(f"/streams/{sid}/preview", json={}).json()
     assert preview["can_push"] is False
     assert {i["key"] for i in preview["merge_items"]} == {"11110:weight_changed_removed", "11120:added_in_kt"}
 
     # ошибка сети при отправке: черновик цел, повтор проходит
     resolutions = {"resolutions": {"11110:weight_changed_removed": "keitaro"}}
-    mock_kt.fail_next("network", "push")
+    fake_kt.fail_next("network", "push")
     assert api.post(f"/streams/{sid}/push", json=resolutions).status_code == 502
     assert api.get(f"/campaigns/{campaign_id}").json()["streams"][1]["dirty"] is True
     assert api.post(f"/streams/{sid}/push", json=resolutions).status_code == 200
-    assert kt_weights(mock_kt)[11110] == 40 and 11120 in kt_weights(mock_kt)
+    assert kt_weights(fake_kt)[11110] == 40 and 11120 in kt_weights(fake_kt)

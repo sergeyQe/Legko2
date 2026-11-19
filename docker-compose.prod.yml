@@ -1,4 +1,4 @@
-# Боевой запуск: PostgreSQL + бэкенд + Caddy (фронтенд и HTTPS). Режим Keitaro: mock.
+# Боевой запуск: PostgreSQL + бэкенд + Caddy (фронтенд и HTTPS). Работает с реальным тестовым Keitaro.
 # Запуск: docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 services:
   db:
@@ -21,7 +21,12 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://legko2:${POSTGRES_PASSWORD}@db:5432/legko2
-      KEITARO_MODE: mock
+      KEITARO_URL: ${KEITARO_URL:?задайте KEITARO_URL в .env.prod}
+      KEITARO_API_KEY: ${KEITARO_API_KEY:?задайте KEITARO_API_KEY в .env.prod}
+      CAMPAIGN_PREFIX: ${CAMPAIGN_PREFIX:?задайте CAMPAIGN_PREFIX в .env.prod}
+      DEFAULT_DOMAIN: ${DEFAULT_DOMAIN:-kylovoa.com}
+      DEFAULT_GROUP: ${DEFAULT_GROUP:-FORTESTS}
+      DEFAULT_SOURCE: ${DEFAULT_SOURCE:-FORTESTS}
       ROOT_PATH: /api
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:

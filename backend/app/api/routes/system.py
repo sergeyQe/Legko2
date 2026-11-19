@@ -25,15 +25,13 @@ def health() -> dict[str, str]:
 @router.get(
     "/meta",
     response_model=MetaOut,
-    summary="Узнать режим работы сервиса",
+    summary="Получить сведения о сервисе",
     description=(
-        "Возвращает режим Keitaro: `mock` (встроенная заглушка с данными из скриншотов) или `real` "
-        "(настоящий Admin API). Фронтенд по этому полю решает, показывать ли демо-панель. "
-        "Ничего не меняет и не обращается к Keitaro."
+        "Возвращает версию сервиса, адрес Keitaro (для ссылки «Кампания в Keitaro») и префикс названий кампаний, "
+        "с которыми работает сервис (кампании без него не показываются и не изменяются). "
+        "Ключ Keitaro наружу не отдаётся. Ничего не меняет и не обращается к Keitaro."
     ),
 )
 def meta(settings: Settings = Depends(get_settings)) -> MetaOut:
-    """Режим работы сервиса и версия."""
-    # адрес Keitaro показываем только в режиме real; ключ наружу не отдаём никогда
-    keitaro_url = settings.keitaro_url if settings.keitaro_mode == "real" else ""
-    return MetaOut(mode=settings.keitaro_mode, version=APP_VERSION, keitaro_url=keitaro_url)
+    """Версия сервиса, адрес Keitaro и префикс кампаний."""
+    return MetaOut(version=APP_VERSION, keitaro_url=settings.keitaro_url, campaign_prefix=settings.campaign_prefix)

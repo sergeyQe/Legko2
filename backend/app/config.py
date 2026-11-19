@@ -1,6 +1,5 @@
 """Настройки приложения из переменных окружения и файла .env."""
 from functools import lru_cache
-from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,14 +18,19 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://legko2:legko2@localhost:5432/legko2",
         description="Строка подключения SQLAlchemy к PostgreSQL",
     )
-    keitaro_mode: Literal["mock", "real"] = Field(
-        default="mock", description="mock — встроенная заглушка Keitaro, real — настоящий Admin API"
-    )
     keitaro_url: str = Field(default="", description="Адрес Keitaro, например https://kt.example.com")
     keitaro_api_key: str = Field(default="", description="Ключ Admin API (заголовок Api-Key)")
     keitaro_timeout_seconds: float = Field(default=10.0, description="Таймаут запроса к Keitaro, сек")
+    campaign_prefix: str = Field(
+        default="",
+        description=(
+            "Префикс названий кампаний, с которыми работает сервис, например test_titov_. "
+            "Стенд Keitaro общий: кампании без этого префикса не показываются и не изменяются, "
+            "а новые кампании получают его автоматически. Обязателен."
+        ),
+    )
 
-    default_domain: str = Field(default="in.posdk.xyz", description="Домен по умолчанию для новой кампании")
+    default_domain: str = Field(default="kylovoa.com", description="Домен по умолчанию для новой кампании")
     default_group: str = Field(default="FORTESTS", description="Группа по умолчанию для новой кампании")
     default_source: str = Field(default="FORTESTS", description="Источник трафика по умолчанию")
 

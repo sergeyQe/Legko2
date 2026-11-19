@@ -124,20 +124,7 @@ export interface OfferSearchResult {
 }
 
 export interface Meta {
-  mode: "mock" | "real";
   version: string;
-  keitaro_url: string; // адрес Keitaro (пусто в режиме mock)
-}
-
-export interface ExternalChangeBody {
-  scenario: "offer_added" | "weight_changed" | "offer_removed";
-  stream_id: number;
-  offer_id: number;
-  weight?: number;
-}
-
-export interface FailureBody {
-  kind: "network" | "auth" | "edition" | "not_found" | "rejected";
-  target: "fetch" | "push" | "create_campaign" | "create_stream1" | "create_stream2";
-  times?: number;
+  keitaro_url: string; // адрес Keitaro
+  campaign_prefix: string; // префикс названий кампаний (например test_titov_)
 }

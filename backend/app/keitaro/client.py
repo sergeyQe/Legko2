@@ -16,6 +16,10 @@ class KeitaroClient(ABC):
         """Возвращает все кампании."""
 
     @abstractmethod
+    def get_campaign(self, campaign_id: int) -> KtCampaign:
+        """Возвращает одну кампанию (нужно для проверки названия перед действиями с ней)."""
+
+    @abstractmethod
     def get_campaign_streams(self, campaign_id: int) -> list[KtStream]:
         """Возвращает все потоки кампании, включая потоки без офферов."""
 

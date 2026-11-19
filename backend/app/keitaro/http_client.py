@@ -87,11 +87,17 @@ class HttpKeitaroClient(KeitaroClient):
 
     @staticmethod
     def _error_text(response: httpx.Response) -> str:
-        """Достаёт текст ошибки Keitaro: поле error из тела или сырой текст."""
+        """Достаёт текст ошибки Keitaro: поле error, ошибки полей {"поле": ["текст"]} или сырой текст."""
         try:
             body = response.json()
             if isinstance(body, dict) and body.get("error"):
                 return str(body["error"])
+            if isinstance(body, dict) and body:
+                parts = []
+                for field, messages in body.items():
+                    texts = messages if isinstance(messages, list) else [messages]
+                    parts.append(f"{field}: {'; '.join(str(m) for m in texts)}")
+                return "; ".join(parts)[:500]
         except ValueError:
             pass
         return response.text[:500] or f"HTTP {response.status_code}"
@@ -159,6 +165,10 @@ class HttpKeitaroClient(KeitaroClient):
             if len(items) < CAMPAIGNS_PAGE_SIZE:
                 break
         return result
+
+    def get_campaign(self, campaign_id: int) -> KtCampaign:
+        data = self._request("GET", f"/campaigns/{campaign_id}")
+        return KtCampaign(int(data["id"]), str(data.get("name", "")), str(data.get("alias", "")))
 
     def get_campaign_streams(self, campaign_id: int) -> list[KtStream]:
         items = self._request("GET", f"/campaigns/{campaign_id}/streams")

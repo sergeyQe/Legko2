@@ -18,9 +18,10 @@ const STEP_LABEL: Record<CreateStep["name"], string> = {
 
 interface Props {
   onOpenCampaign: (keitaroId: number) => Promise<void>; // перейти в редактор созданной кампании
+  campaignPrefix?: string; // префикс названий кампаний на общем стенде (например test_titov_)
 }
 
-export function CreateCampaignPage({ onOpenCampaign }: Props) {
+export function CreateCampaignPage({ onOpenCampaign, campaignPrefix = "" }: Props) {
   const [refs, setRefs] = useState<References | null>(null);
   const [name, setName] = useState("");
   const [geo, setGeo] = useState("");
@@ -63,7 +64,11 @@ export function CreateCampaignPage({ onOpenCampaign }: Props) {
     return () => clearTimeout(timer);
   }, [offerInput]);
 
-  const alias = previewAlias(name);
+  // итоговое название: сервер сам добавляет префикс, если его нет
+  const trimmed = name.trim();
+  const fullName =
+    trimmed === "" || trimmed.toLowerCase().startsWith(campaignPrefix.toLowerCase()) ? trimmed : `${campaignPrefix}${trimmed}`;
+  const alias = previewAlias(fullName);
   const geoOk = isGeoCode(geo);
   const valid = name.trim() !== "" && alias !== "" && geoOk && offer !== null;
 
@@ -221,7 +226,10 @@ export function CreateCampaignPage({ onOpenCampaign }: Props) {
           <div className="field">
             <label htmlFor={ids.name}>Название кампании</label>
             <input id={ids.name} value={name} autoComplete="off" onChange={(e) => setName(e.target.value)} />
-            <div className="hint">{alias ? `Алиас: ${alias} (изменить можно в Keitaro)` : "Алиас построится из названия"}</div>
+            <div className="hint">
+              {campaignPrefix && `Префикс «${campaignPrefix}» добавится автоматически. `}
+              {alias ? `Алиас: ${alias} (изменить можно в Keitaro)` : "Алиас построится из названия"}
+            </div>
           </div>
 
           <div className="field">
@@ -274,7 +282,7 @@ export function CreateCampaignPage({ onOpenCampaign }: Props) {
           <h2>Что будет создано в Keitaro</h2>
           <div className="pv">
             <span className="pk">Кампания</span>
-            <strong>{name.trim() || "Название кампании"}</strong>
+            <strong>{fullName || "Название кампании"}</strong>
             <span className="pm">
               алиас {alias || "алиас"} · домен {nameOf(refs?.domains, domainId) ?? "не задан"} · группа{" "}
               {nameOf(refs?.groups, groupId) ?? "не задана"} · источник {nameOf(refs?.sources, sourceId) ?? "не задан"} · ротация по весу
