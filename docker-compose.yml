@@ -1,0 +1,22 @@
+# PostgreSQL для разработки. Запуск: docker compose up -d
+services:
+  db:
+    image: postgres:16
+    container_name: legko2-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-legko2}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-legko2}
+      POSTGRES_DB: ${POSTGRES_DB:-legko2}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - legko2_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-legko2} -d ${POSTGRES_DB:-legko2}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  legko2_pgdata:
