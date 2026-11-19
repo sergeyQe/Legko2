@@ -22,3 +22,27 @@ def session(engine):
     """Сессия БД для теста."""
     with Session(engine, expire_on_commit=False) as session:
         yield session
+
+
+@pytest.fixture
+def mock_kt():
+    """Заглушка Keitaro для API-тестов."""
+    from app.keitaro.mock_client import MockKeitaroClient
+
+    return MockKeitaroClient()
+
+
+@pytest.fixture
+def api(session, mock_kt):
+    """HTTP-клиент приложения: БД SQLite в памяти и заглушка Keitaro вместо настоящих."""
+    from fastapi.testclient import TestClient
+
+    from app.db import get_session
+    from app.keitaro.factory import get_keitaro_client
+    from app.main import create_app
+
+    app = create_app()
+    app.dependency_overrides[get_session] = lambda: session
+    app.dependency_overrides[get_keitaro_client] = lambda: mock_kt
+    with TestClient(app) as client:
+        yield client
