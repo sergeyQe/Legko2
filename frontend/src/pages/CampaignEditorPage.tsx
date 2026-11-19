@@ -34,18 +34,23 @@ export function CampaignEditorPage({ campaignId, keitaroUrl }: Props) {
     toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
   }, []);
 
-  // открываем кампанию из нашей БД; если потоки ещё не загружали, загружаем их из Keitaro
+  // открываем кампанию из нашей БД; если потоки ещё не загружали, загружаем их из Keitaro.
+  // Запрос общий для повторного запуска эффекта (StrictMode в разработке), чтобы не грузить кампанию дважды.
+  const loading = useRef<{ id: number; promise: Promise<Campaign> } | null>(null);
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        let loaded = await api.campaign(campaignId);
-        if (!loaded.fetched_at) loaded = await api.fetchCampaign(campaignId);
-        if (!cancelled) setCampaign(loaded);
-      } catch (error) {
-        if (!cancelled) setLoadError(errorText(error));
-      }
-    })();
+    if (loading.current?.id !== campaignId) {
+      loading.current = {
+        id: campaignId,
+        promise: (async () => {
+          const loaded = await api.campaign(campaignId);
+          return loaded.fetched_at ? loaded : api.fetchCampaign(campaignId);
+        })(),
+      };
+    }
+    loading.current.promise
+      .then((loaded) => !cancelled && setCampaign(loaded))
+      .catch((error) => !cancelled && setLoadError(errorText(error)));
     return () => {
       cancelled = true;
       clearTimeout(toastTimer.current);

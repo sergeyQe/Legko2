@@ -150,6 +150,27 @@ describe("создание кампании", () => {
     expect(await screen.findByRole("heading", { name: "Кампания создана" })).toBeInTheDocument();
   });
 
+  it("если сервер не прислал описания шагов, показываются запасные подписи", async () => {
+    mocked.createCampaign.mockRejectedValue(
+      new ApiError(502, "CREATE_PARTIAL", "Кампания создана не полностью.", {
+        steps: [
+          { name: "campaign", status: "ok", error: null },
+          { name: "stream1", status: "ok", error: null },
+          { name: "stream2", status: "failed", error: "Offer not found" },
+        ],
+        campaign_id: 1,
+        name: "Тест",
+        alias: "test",
+      }),
+    );
+    const user = userEvent.setup();
+    render(<CreateCampaignPage onOpenCampaign={vi.fn()} />);
+    await fillValidForm(user);
+    await user.click(screen.getByRole("button", { name: "Создать кампанию" }));
+    expect(await screen.findByText(/Поток 2: оффер, доля 100%/)).toBeInTheDocument();
+    expect(screen.getByText("Кампания")).toBeInTheDocument();
+  });
+
   it("обычная ошибка возвращает к форме с сообщением, введённое сохраняется", async () => {
     mocked.createCampaign.mockRejectedValue(new ApiError(422, "KEITARO_REJECTED", "Keitaro отклонил запрос. Причина: Alias already exists"));
     const user = userEvent.setup();

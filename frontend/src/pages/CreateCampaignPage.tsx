@@ -9,6 +9,13 @@ type Stage = "form" | "running" | "done";
 
 const STEP_ICON: Record<CreateStep["status"], string> = { ok: "✓", failed: "✕", skipped: "·" };
 
+/** Подписи шагов на случай, если сервер не прислал описание. */
+const STEP_LABEL: Record<CreateStep["name"], string> = {
+  campaign: "Кампания",
+  stream1: "Поток 1: страна принимается, редирект на Google",
+  stream2: "Поток 2: оффер, доля 100%",
+};
+
 interface Props {
   onOpenCampaign: (keitaroId: number) => Promise<void>; // перейти в редактор созданной кампании
 }
@@ -151,7 +158,7 @@ export function CreateCampaignPage({ onOpenCampaign }: Props) {
                   <li key={step.name} className={step.status}>
                     <span className="ic">{STEP_ICON[step.status]}</span>
                     <span>
-                      {step.description}
+                      {step.description || STEP_LABEL[step.name]}
                       {step.error && <div>Ошибка Keitaro: {step.error}</div>}
                     </span>
                   </li>

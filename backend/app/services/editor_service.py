@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.domain import draft as draft_ops
@@ -57,7 +58,23 @@ class EditorService:
         return self._campaign_view(self._get_campaign(campaign_id))
 
     def fetch_campaign(self, keitaro_campaign_id: int) -> CampaignView:
-        """Загружает потоки кампании из Keitaro. Неопубликованные черновики не сбрасываются."""
+        """Загружает потоки кампании из Keitaro. Неопубликованные черновики не сбрасываются.
+
+        Две одновременные загрузки одной кампании (двойной клик, две вкладки) могут одновременно создать одни и те же
+        потоки: вторая упрётся в уникальность. Тогда откатываем и повторяем: данные первой загрузки уже сохранены.
+        """
+        for attempt in (1, 2):
+            try:
+                return self._fetch_campaign_once(keitaro_campaign_id)
+            except IntegrityError:
+                self._session.rollback()
+                logger.warning("Fetch: параллельная загрузка кампании %s, попытка %s", keitaro_campaign_id, attempt)
+                if attempt == 2:
+                    raise
+        raise RuntimeError("недостижимо")  # цикл всегда возвращает результат или бросает ошибку
+
+    def _fetch_campaign_once(self, keitaro_campaign_id: int) -> CampaignView:
+        """Одна попытка загрузки потоков кампании из Keitaro."""
         # сначала читаем Keitaro: при ошибке в нашей БД ничего не меняется
         kt_streams = self._keitaro.get_campaign_streams(keitaro_campaign_id)
         kt_campaign = next((c for c in self._keitaro.list_campaigns() if c.campaign_id == keitaro_campaign_id), None)

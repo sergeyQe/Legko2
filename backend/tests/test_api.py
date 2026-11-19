@@ -210,6 +210,18 @@ def test_unexpected_error_is_hidden_behind_generic_response(session):
     assert body["code"] == "INTERNAL_ERROR" and "секретные" not in response.text
 
 
+def test_unexpected_error_still_carries_cors_header_for_allowed_origin(session):
+    # без заголовка браузер показал бы «заблокировано CORS» вместо нашего сообщения об ошибке
+    app = create_app()
+    app.dependency_overrides[get_session] = lambda: session
+    app.dependency_overrides[get_keitaro_client] = lambda: (_ for _ in ()).throw(RuntimeError("сбой"))
+    with TestClient(app, raise_server_exceptions=False) as client:
+        allowed = client.get("/campaigns", headers={"Origin": "http://localhost:5173"})
+        foreign = client.get("/campaigns", headers={"Origin": "http://evil.example"})
+    assert allowed.status_code == 500 and allowed.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "access-control-allow-origin" not in foreign.headers
+
+
 # ---------- создание кампании и справочники ----------
 
 def test_references_and_offer_search(api):
@@ -255,6 +267,8 @@ def test_partial_creation_returns_steps_and_can_be_retried(api, mock_kt):
     response = api.post("/campaign-creator/campaigns", json={"name": "Частично", "geo": "AU", "offer_id": 11112})
     body = assert_error(response, 502, "CREATE_PARTIAL")
     assert [s["status"] for s in body["details"]["steps"]] == ["ok", "ok", "failed"]
+    # у каждого шага есть описание для показа пользователю
+    assert all(s["description"] for s in body["details"]["steps"])
     campaign_id = body["details"]["campaign_id"]
 
     retry = api.post(f"/campaign-creator/campaigns/{campaign_id}/retry-stream2", json={"offer_id": 11112})

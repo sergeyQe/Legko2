@@ -1,5 +1,5 @@
 /** Демо-панель (только режим mock): имитация правок и сбоев Keitaro и сброс данных. */
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { api } from "../api/client";
 import { errorText } from "../lib/format";
@@ -11,8 +11,11 @@ interface Props {
 /** ID потока 2 в заглушке Keitaro и офферы для сценариев демонстрации. */
 const MOCK_STREAM_ID = 2;
 
+const MESSAGE_MS = 6000; // сколько показываем сообщение демо-панели
+
 export function DemoPanel({ onReset }: Props) {
   const [message, setMessage] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>();
 
   async function run(action: () => Promise<unknown>, success: string) {
     try {
@@ -21,6 +24,9 @@ export function DemoPanel({ onReset }: Props) {
     } catch (error) {
       setMessage(errorText(error));
     }
+    // сообщение не должно устаревать: через несколько секунд убираем
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setMessage(null), MESSAGE_MS);
   }
 
   return (

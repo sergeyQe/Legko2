@@ -197,6 +197,7 @@ describe("отправка в Keitaro", () => {
     await user.click(await screen.findByRole("button", { name: "Отправить в KT" }));
     const dialog = await screen.findByRole("dialog");
     expect(await within(dialog).findByText("Отправить «Поток 2» в Keitaro?")).toBeInTheDocument();
+    expect(within(dialog).getByText("Сейчас в Keitaro")).toBeInTheDocument();
     expect(within(dialog).getByText("+1 добавится")).toBeInTheDocument();
     expect(within(dialog).getByText("~1 изменится вес")).toBeInTheDocument();
     expect(mocked.preview).toHaveBeenCalledWith(2, {});
@@ -214,6 +215,18 @@ describe("отправка в Keitaro", () => {
     await user.click(await screen.findByRole("button", { name: "Отправить в KT" }));
     const dialog = await screen.findByRole("dialog");
     await within(dialog).findByText("Отправить «Поток 2» в Keitaro?");
+    expect(within(dialog).getByRole("button", { name: "Отправить в KT" })).toBeDisabled();
+  });
+
+  it("если активных офферов нет, диалог объясняет, почему отправить нельзя", async () => {
+    const empty = stream(2, [offer(11109, 0, { state: "removing", kt_weight: 100 })], { dirty: true });
+    mocked.campaign.mockResolvedValue(campaign([empty]));
+    mocked.preview.mockResolvedValue(preview(empty, { can_push: false }));
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByRole("button", { name: "Отправить в KT" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText(/не осталось активных офферов/)).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Отправить в KT" })).toBeDisabled();
   });
 

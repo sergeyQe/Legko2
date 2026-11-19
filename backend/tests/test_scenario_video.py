@@ -122,6 +122,53 @@ def test_full_scenario_from_the_video(scenario, mock_kt):
     assert final["weight_sum"] == 100 and final["dirty"] is False
 
 
+def test_parallel_fetch_of_the_same_campaign_does_not_fail(mock_kt):
+    """Двойной клик или две вкладки: одновременные загрузки одной кампании обе проходят (только PostgreSQL).
+
+    На каждый запрос открывается своя сессия, как в работающем приложении.
+    """
+    import threading
+
+    url = os.environ.get("TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("TEST_DATABASE_URL не задан: проверка параллельной загрузки пропущена")
+    engine = create_engine(url)
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+
+    def session_per_request():
+        with Session(engine, expire_on_commit=False) as session:
+            yield session
+
+    app = create_app()
+    app.dependency_overrides[get_session] = session_per_request
+    app.dependency_overrides[get_keitaro_client] = lambda: mock_kt
+    try:
+        with TestClient(app) as client:
+            campaign_id = next(c["id"] for c in client.get("/campaigns").json() if c["keitaro_id"] == 93212)
+            for _ in range(5):  # несколько раундов: гонка срабатывает не всегда
+                Base.metadata.drop_all(engine)
+                Base.metadata.create_all(engine)
+                campaign_id = next(c["id"] for c in client.get("/campaigns").json() if c["keitaro_id"] == 93212)
+                results: list[int] = []
+                barrier = threading.Barrier(2)
+
+                def load():
+                    barrier.wait()
+                    results.append(client.post(f"/campaigns/{campaign_id}/fetch").status_code)
+
+                threads = [threading.Thread(target=load) for _ in range(2)]
+                for t in threads:
+                    t.start()
+                for t in threads:
+                    t.join()
+                assert results == [200, 200]
+                assert len(client.get(f"/campaigns/{campaign_id}").json()["streams"]) == 2
+    finally:
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+
+
 def test_scenario_merge_and_error_over_http(scenario, mock_kt):
     api = scenario
     campaign_id = next(c["id"] for c in api.get("/campaigns").json() if c["keitaro_id"] == 93212)

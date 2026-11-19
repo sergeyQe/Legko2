@@ -281,7 +281,7 @@ function ReviewStep({ stream, preview }: { stream: Stream; preview: Preview }) {
       </div>
       <div className="preview-pair">
         <div className="cmp">
-          <div className="cap">Сейчас в Keitaro (по последней загрузке)</div>
+          <div className="cap">Сейчас в Keitaro</div>
           <ShareBar small items={preview.keitaro_offers.map((o) => ({ weight: o.weight, pinned: false }))} />
         </div>
         <div className="cmp">
@@ -290,6 +290,13 @@ function ReviewStep({ stream, preview }: { stream: Stream; preview: Preview }) {
         </div>
       </div>
       <ChangeTable changes={preview.changes} />
+      {active.length === 0 && (
+        <div className="note err" role="alert">
+          <div className="grow">
+            В потоке не осталось активных офферов, отправлять нечего. Верните оффер в поток или отмените изменения.
+          </div>
+        </div>
+      )}
       {merged.length > 0 && (
         <div className="mrow auto">
           <span className="ok-ic" aria-hidden="true">✓</span>

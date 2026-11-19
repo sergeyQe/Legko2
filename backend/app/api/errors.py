@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.config import get_settings
 from app.domain.errors import (
     DomainError,
     EmptyStreamError,
@@ -57,7 +58,7 @@ def describe_domain_error(exc: DomainError) -> tuple[int, dict]:
         return 409, error_body("MERGE_CONFLICT", str(exc), {"conflicts": conflicts})
     if isinstance(exc, CreatePartialError):
         report = exc.report
-        steps = [{"name": s.name, "status": s.status, "error": s.error} for s in report.steps]
+        steps = [{"name": s.name, "description": s.description, "status": s.status, "error": s.error} for s in report.steps]
         details = {"steps": steps, "campaign_id": report.campaign_id, "name": report.name, "alias": report.alias}
         return 502, error_body("CREATE_PARTIAL", str(exc), details)
     return 400, error_body("DOMAIN_ERROR", str(exc))
@@ -113,4 +114,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(Exception)
     async def unexpected_handler(request: Request, exc: Exception) -> JSONResponse:
         logger.exception("Необработанная ошибка: %s %s", request.method, request.url.path)
-        return _json(500, error_body("INTERNAL_ERROR", "Внутренняя ошибка сервиса. Подробности в журнале."))
+        response = _json(500, error_body("INTERNAL_ERROR", "Внутренняя ошибка сервиса. Подробности в журнале."))
+        # этот ответ идёт мимо CORS-обработчика: без заголовка браузер покажет «заблокировано CORS» вместо нашей ошибки
+        origin = request.headers.get("origin")
+        if origin and origin in get_settings().cors_origin_list:
+            response.headers["access-control-allow-origin"] = origin
+            response.headers["vary"] = "Origin"
+        return response
