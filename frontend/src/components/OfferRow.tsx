@@ -1,6 +1,7 @@
 /** Строка оффера: метка цвета сегмента, название, доля, закрепление и убрать/вернуть. */
 import type { Offer } from "../api/types";
 import { isActive, stateTag } from "../lib/format";
+import { SEGMENT_COLORS } from "./ShareBar";
 
 const PIN_ICON = (
   <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
@@ -26,7 +27,7 @@ export function OfferRow({ offer, colorIndex, busy, onPin, onRemove, onRestore }
 
   return (
     <div className={`orow${active ? "" : " gone"}`} data-testid={`offer-${offer.offer_id}`}>
-      <span className={`dot${active && colorIndex !== null ? ` c${colorIndex % 4}` : ""}`} />
+      <span className={`dot${active && colorIndex !== null ? ` c${colorIndex % SEGMENT_COLORS}` : ""}`} />
       <div className="name">
         <span className="oid">{offer.offer_id}</span>
         {offer.name}

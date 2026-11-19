@@ -10,6 +10,9 @@ export interface ShareItem {
 /** Минимальный вес, при котором внутри сегмента помещается подпись с процентом. */
 export const LABEL_MIN_WEIGHT = 9;
 
+/** Сколько разных цветов у сегментов (классы c0..c7 в styles.css); дальше цвета повторяются. */
+export const SEGMENT_COLORS = 8;
+
 interface Props {
   items: ShareItem[];
   small?: boolean; // уменьшенная полоса для сравнения в диалоге
@@ -31,7 +34,7 @@ export function ShareBar({ items, small = false }: Props) {
         return (
           <div
             key={index}
-            className={`seg c${index % 4}${item.pinned ? " pinned" : ""}`}
+            className={`seg c${index % SEGMENT_COLORS}${item.pinned ? " pinned" : ""}`}
             style={style}
             title={item.title}
             data-testid="segment"

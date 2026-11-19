@@ -27,6 +27,10 @@
   --s2: #8db8d6;
   --s3: #e6b87a;
   --s4: #d49ba9;
+  --s5: #b3a4d9;
+  --s6: #d8d27e;
+  --s7: #7cc4c4;
+  --s8: #e39f86;
   --seg-fg: #1d2b24;
   --seg-sh: none;
   --demo-bg: #e1e6df;
@@ -66,6 +70,10 @@
     --s2: #7fafd0;
     --s3: #ddaf70;
     --s4: #c98c9b;
+    --s5: #a597cf;
+    --s6: #c9c470;
+    --s7: #6db8b8;
+    --s8: #d38f77;
     --seg-fg: #0f1a14;
     --demo-bg: #101512;
     color-scheme: dark;
@@ -99,6 +107,10 @@
   --s2: #7fafd0;
   --s3: #ddaf70;
   --s4: #c98c9b;
+  --s5: #a597cf;
+  --s6: #c9c470;
+  --s7: #6db8b8;
+  --s8: #d38f77;
   --seg-fg: #0f1a14;
   --demo-bg: #101512;
   color-scheme: dark;
@@ -501,6 +513,18 @@ h3 {
 }
 .c3 {
   background: var(--s4);
+}
+.c4 {
+  background: var(--s5);
+}
+.c5 {
+  background: var(--s6);
+}
+.c6 {
+  background: var(--s7);
+}
+.c7 {
+  background: var(--s8);
 }
 
 /* офферы */

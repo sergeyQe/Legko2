@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { LABEL_MIN_WEIGHT, ShareBar } from "../components/ShareBar";
+import { LABEL_MIN_WEIGHT, SEGMENT_COLORS, ShareBar } from "../components/ShareBar";
 
 describe("ShareBar", () => {
   it("рисует сегмент на каждый оффер с весом больше нуля", () => {
@@ -28,6 +28,14 @@ describe("ShareBar", () => {
   it("описывает распределение для скринридеров", () => {
     render(<ShareBar items={[{ weight: 33, pinned: false }, { weight: 67, pinned: false }]} />);
     expect(screen.getByRole("img")).toHaveAccessibleName("Распределение долей: 33%, 67%");
+  });
+
+  it("красит соседние сегменты в разные цвета, повтор начинается только после восьмого", () => {
+    const items = Array.from({ length: 9 }, () => ({ weight: 11, pinned: false }));
+    render(<ShareBar items={items} />);
+    const classes = screen.getAllByTestId("segment").map((s) => [...s.classList].find((c) => /^c\d$/.test(c)));
+    expect(new Set(classes.slice(0, SEGMENT_COLORS)).size).toBe(SEGMENT_COLORS);
+    expect(classes[SEGMENT_COLORS]).toBe(classes[0]);
   });
 
   it("при отсутствии активных офферов показывает пояснение", () => {
