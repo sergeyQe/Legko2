@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain import draft as draft_ops
+from app.domain.errors import WeightError
 from app.domain.merge import merge_with_keitaro
 from app.domain.states import DraftOffer, KtOfferState, active_sum, offer_state
 from app.keitaro.client import KeitaroClient
@@ -282,6 +283,18 @@ class EditorService:
             old.was_archived = True
             old.weight = 0
             result.append(old)
+
+        # если в Keitaro доли не дают 100% (например, оффер удалили вручную), пересчитываем черновик до 100%
+        total = sum(o.weight for o in result if o.active)
+        if total != 100 and any(o.active for o in result):
+            try:
+                draft_ops.recalculate(result)
+                notes.append(f"В Keitaro сумма долей {total}%. Пересчитали до 100%: отправьте поток, чтобы исправить Keitaro.")
+            except WeightError:
+                notes.append(
+                    f"В Keitaro сумма долей {total}%, а закреплённые веса не позволяют пересчитать. "
+                    "Открепите вес хотя бы одного оффера."
+                )
         return result, notes
 
     def _save(self, stream: Stream, drafts: list[DraftOffer]) -> StreamView:

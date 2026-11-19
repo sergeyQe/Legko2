@@ -117,7 +117,30 @@ def test_offer_removed_in_keitaro_appears_as_removed_after_fetch(svc, kt, stream
     view = svc.fetch_campaign(CAMPAIGN).streams[1]
     assert states(view)[11111] == OfferState.REMOVED
     assert any("11111" in note for note in view.notes)
-    assert not view.dirty
+    # в Keitaro осталось 33+33=66%: доли пересчитаны до 100%, поток требует отправки
+    assert weights(view) == {11109: 50, 11110: 50, 11111: 0}
+    assert view.dirty and view.weight_sum == 100
+    assert any("сумма долей 66%" in note for note in view.notes)
+
+
+def test_fetch_with_bad_sum_and_unfixable_pins_only_warns(svc, kt, stream_id):
+    svc.set_pin(stream_id, 11109, True)
+    svc.set_pin(stream_id, 11110, True)
+    svc.set_pin(stream_id, 11111, True)
+    svc.push(stream_id)
+    kt.external_offer_removed(2, 11111)
+    view = svc.fetch_campaign(CAMPAIGN).streams[1]
+    # закреплены все оставшиеся офферы (33+33=66): пересчитать нельзя, веса остаются как в Keitaro
+    assert weights(view) == {11109: 33, 11110: 33, 11111: 0}
+    assert not view.dirty and view.weight_sum == 66
+    assert any("Открепите вес" in note for note in view.notes)
+
+
+def test_fetch_with_valid_sum_keeps_stream_clean(svc, kt, stream_id):
+    kt.external_weight_changed(2, 11109, 34)
+    kt.external_weight_changed(2, 11111, 33)
+    view = svc.fetch_campaign(CAMPAIGN).streams[1]
+    assert weights(view) == {11109: 34, 11110: 33, 11111: 33} and not view.dirty
 
 
 def test_pinned_weight_is_kept_through_changes_and_pushed(svc, kt, stream_id):
