@@ -217,6 +217,7 @@ class MetaOut(BaseModel):
 
     mode: Literal["mock", "real"] = Field(description="Режим Keitaro: mock — заглушка, real — настоящий Admin API")
     version: str = Field(description="Версия сервиса")
+    keitaro_url: str = Field(description="Адрес Keitaro для ссылки «Кампания в Keitaro» (пусто в режиме mock)")
 
 
 class ExternalChangeBody(BaseModel):

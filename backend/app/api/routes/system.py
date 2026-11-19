@@ -34,4 +34,6 @@ def health() -> dict[str, str]:
 )
 def meta(settings: Settings = Depends(get_settings)) -> MetaOut:
     """Режим работы сервиса и версия."""
-    return MetaOut(mode=settings.keitaro_mode, version=APP_VERSION)
+    # адрес Keitaro показываем только в режиме real; ключ наружу не отдаём никогда
+    keitaro_url = settings.keitaro_url if settings.keitaro_mode == "real" else ""
+    return MetaOut(mode=settings.keitaro_mode, version=APP_VERSION, keitaro_url=keitaro_url)

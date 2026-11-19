@@ -44,7 +44,7 @@ def assert_error(response, status: int, code: str) -> dict:
 def test_health_and_meta(api):
     assert api.get("/health").json() == {"status": "ok"}
     meta = api.get("/meta").json()
-    assert meta["mode"] == "mock" and meta["version"]
+    assert meta["mode"] == "mock" and meta["version"] and meta["keitaro_url"] == ""
 
 
 # ---------- сценарий из видео ----------
