@@ -49,11 +49,21 @@ export function OfferRow({ offer, colorIndex, busy, onPin, onRemove, onRestore }
           </button>
         )}{" "}
         {active ? (
-          <button className="btn sm" disabled={busy} onClick={() => onRemove(offer)}>
+          <button
+            className="btn sm"
+            disabled={busy}
+            aria-label={`Убрать из потока, оффер ${offer.offer_id}`}
+            onClick={() => onRemove(offer)}
+          >
             Убрать из потока
           </button>
         ) : (
-          <button className="btn sm" disabled={busy} onClick={() => onRestore(offer)}>
+          <button
+            className="btn sm"
+            disabled={busy}
+            aria-label={`Вернуть в поток, оффер ${offer.offer_id}`}
+            onClick={() => onRestore(offer)}
+          >
             Вернуть в поток
           </button>
         )}

@@ -54,7 +54,12 @@ export function StreamCard(props: Props) {
             <button className="btn" disabled={busy} onClick={props.onCancel}>
               Отменить изменения
             </button>
-            <button className="btn primary" disabled={busy} onClick={props.onOpenPush}>
+            <button
+              className="btn primary"
+              disabled={busy || active.length === 0}
+              title={active.length === 0 ? "В потоке нет активных офферов: отправлять нечего" : undefined}
+              onClick={props.onOpenPush}
+            >
               Отправить в KT
             </button>
           </div>
@@ -70,6 +75,13 @@ export function StreamCard(props: Props) {
             <button className="btn sm" disabled={busy} onClick={props.onRetry}>
               Повторить
             </button>
+          </div>
+        )}
+        {stream.dirty && active.length === 0 && (
+          <div className="note" role="note" style={{ margin: "0 20px 8px" }}>
+            <div className="grow">
+              В потоке не осталось активных офферов, отправлять в Keitaro нечего. Верните оффер в поток или отмените изменения.
+            </div>
           </div>
         )}
         {stream.notes.length > 0 && (

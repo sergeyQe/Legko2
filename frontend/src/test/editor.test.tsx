@@ -29,7 +29,7 @@ const afterAdd = stream(
 );
 
 function open() {
-  return render(<CampaignEditorPage campaignId={1} keitaroUrl="" />);
+  return render(<CampaignEditorPage campaignId={1} keitaroUrl="" onBack={() => undefined} />);
 }
 
 beforeEach(() => {
@@ -124,7 +124,7 @@ describe("редактор кампании", () => {
     await user.click(within(screen.getByTestId("offer-11109")).getByRole("button", { name: /Закрепить вес/ }));
     expect(mocked.pinOffer).toHaveBeenCalledWith(2, 11109, true);
 
-    await user.click(within(screen.getByTestId("offer-11110")).getByRole("button", { name: "Убрать из потока" }));
+    await user.click(within(screen.getByTestId("offer-11110")).getByRole("button", { name: "Убрать из потока, оффер 11110" }));
     expect(mocked.removeOffer).toHaveBeenCalledWith(2, 11110);
   });
 
@@ -137,7 +137,7 @@ describe("редактор кампании", () => {
     const row = await screen.findByTestId("offer-11109");
     expect(row).toHaveClass("gone");
     expect(within(row).queryByRole("button", { name: /Закрепить/ })).not.toBeInTheDocument();
-    await user.click(within(row).getByRole("button", { name: "Вернуть в поток" }));
+    await user.click(within(row).getByRole("button", { name: "Вернуть в поток, оффер 11109" }));
     expect(mocked.restoreOffer).toHaveBeenCalledWith(2, 11109);
   });
 
@@ -218,16 +218,47 @@ describe("отправка в Keitaro", () => {
     expect(within(dialog).getByRole("button", { name: "Отправить в KT" })).toBeDisabled();
   });
 
-  it("если активных офферов нет, диалог объясняет, почему отправить нельзя", async () => {
+  it("если активных офферов нет, карточка объясняет причину и отправка недоступна", async () => {
     const empty = stream(2, [offer(11109, 0, { state: "removing", kt_weight: 100 })], { dirty: true });
     mocked.campaign.mockResolvedValue(campaign([empty]));
-    mocked.preview.mockResolvedValue(preview(empty, { can_push: false }));
+    open();
+    expect(await screen.findByText(/не осталось активных офферов/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Отправить в KT" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Отменить изменения" })).toBeEnabled();
+  });
+
+  it("добавленный оффер с долей 0% сопровождается предупреждением", async () => {
+    const pinnedAll = stream(2, [offer(11109, 100, { pinned: true }), offer(11112, 0, { state: "added", kt_weight: 0 })], { dirty: true });
+    mocked.addOffer.mockResolvedValue(pinnedAll);
     const user = userEvent.setup();
     open();
-    await user.click(await screen.findByRole("button", { name: "Отправить в KT" }));
-    const dialog = await screen.findByRole("dialog");
-    expect(await within(dialog).findByText(/не осталось активных офферов/)).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: "Отправить в KT" })).toBeDisabled();
+    await screen.findByTestId("stream-2");
+    await user.type(screen.getByRole("combobox", { name: "ID или название оффера" }), "11112");
+    await user.click(screen.getByRole("button", { name: "Добавить" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("доля 0%");
+  });
+
+  it("старое сообщение исчезает при следующем действии", async () => {
+    mocked.addOffer.mockResolvedValue(afterAdd);
+    mocked.pinOffer.mockResolvedValue(afterAdd);
+    const user = userEvent.setup();
+    open();
+    await screen.findByTestId("stream-2");
+    await user.type(screen.getByRole("combobox", { name: "ID или название оффера" }), "11112");
+    await user.click(screen.getByRole("button", { name: "Добавить" }));
+    expect(await screen.findByText(/добавлен в черновик/)).toBeInTheDocument();
+    await user.click(within(screen.getByTestId("offer-11109")).getByRole("button", { name: /Закрепить вес/ }));
+    await waitFor(() => expect(screen.queryByText(/добавлен в черновик/)).not.toBeInTheDocument());
+  });
+
+  it("при ошибке загрузки кампании есть кнопка возврата к списку", async () => {
+    mocked.campaign.mockRejectedValue(new ApiError(404, "NOT_FOUND", "Кампания 5 не найдена."));
+    const onBack = vi.fn();
+    const user = userEvent.setup();
+    render(<CampaignEditorPage campaignId={5} keitaroUrl="" onBack={onBack} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Кампания 5 не найдена.");
+    await user.click(screen.getByRole("button", { name: "К списку кампаний" }));
+    expect(onBack).toHaveBeenCalled();
   });
 
   it("ошибка отправки: диалог закрывается, на потоке плашка с причиной и «Повторить», черновик цел", async () => {
@@ -283,6 +314,42 @@ describe("отправка в Keitaro", () => {
 
     await user.click(within(dialog).getByRole("button", { name: "Отправить в KT" }));
     expect(mocked.push).toHaveBeenCalledWith(2, { [key]: "draft" });
+  });
+
+  it("после ошибки отправки повтор использует уже принятые решения по конфликтам", async () => {
+    const key = "11110:weight_changed_removed";
+    const conflict = { key, kind: "conflict" as const, offer_id: 11110, message: "Конфликт по офферу 11110.", resolution: null };
+    mocked.preview.mockImplementation(async (_id, resolutions = {}) =>
+      resolutions[key]
+        ? preview(afterAdd, { merge_items: [{ ...conflict, resolution: resolutions[key] }], unresolved: [] })
+        : preview(afterAdd, { merge_items: [conflict], unresolved: [conflict], can_push: false }),
+    );
+    mocked.push.mockRejectedValueOnce(new ApiError(502, "KEITARO_UNREACHABLE", "Keitaro не отвечает."));
+    const user = userEvent.setup();
+    open();
+
+    await user.click(await screen.findByRole("button", { name: "Отправить в KT" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(await within(dialog).findByRole("radio", { name: /Вернуть с весом из Keitaro/ }));
+    await user.click(within(dialog).getByRole("button", { name: "Далее: проверить" }));
+    await user.click(within(dialog).getByRole("button", { name: "Отправить в KT" }));
+    const banner = await screen.findByRole("alert");
+
+    mocked.push.mockResolvedValueOnce(stream(2, [offer(11109, 100)]));
+    await user.click(within(banner).getByRole("button", { name: "Повторить" }));
+    await waitFor(() => expect(mocked.push).toHaveBeenLastCalledWith(2, { [key]: "keitaro" }));
+  });
+
+  it("после закрытия диалога фокус возвращается на кнопку, которая его открыла", async () => {
+    mocked.preview.mockResolvedValue(preview(afterAdd));
+    const user = userEvent.setup();
+    open();
+    const opener = await screen.findByRole("button", { name: "Отправить в KT" });
+    await user.click(opener);
+    await screen.findByRole("dialog");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(opener).toHaveFocus();
   });
 
   it("не выпускает фокус за пределы диалога при нажатии Tab", async () => {

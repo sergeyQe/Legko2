@@ -34,7 +34,16 @@ export function App() {
 
   return (
     <div className="app">
-      {meta?.mode === "mock" && <DemoPanel onReset={() => setEpoch((n) => n + 1)} />}
+      {meta?.mode === "mock" && (
+        <DemoPanel
+          onReset={() => {
+            // после сброса ID кампаний меняются: из редактора уходим к списку (он загрузится заново),
+            // на других страницах просто перезагружаем данные
+            if (route.name === "campaign") navigate("/campaigns");
+            else setEpoch((n) => n + 1);
+          }}
+        />
+      )}
       <div className="shell">
         <header className="top">
           <span className="brand">Adrobot · Keitaro</span>
@@ -55,7 +64,9 @@ export function App() {
           {route.name === "campaigns" && (
             <CampaignListPage onOpen={(id) => navigate(`/campaign/${id}`)} onCreate={() => navigate("/create")} />
           )}
-          {route.name === "campaign" && <CampaignEditorPage campaignId={route.id} keitaroUrl={meta?.keitaro_url ?? ""} />}
+          {route.name === "campaign" && (
+            <CampaignEditorPage campaignId={route.id} keitaroUrl={meta?.keitaro_url ?? ""} onBack={() => navigate("/campaigns")} />
+          )}
           {route.name === "create" && <CreateCampaignPage onOpenCampaign={openCampaignByKeitaroId} />}
         </main>
       </div>

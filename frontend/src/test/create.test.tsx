@@ -146,7 +146,7 @@ describe("создание кампании", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("не удаляли");
 
     await user.click(screen.getByRole("button", { name: "Повторить создание потока 2" }));
-    expect(mocked.retryStream2).toHaveBeenCalledWith(93301, 11112, "Тест кампания", "test-kampaniya");
+    expect(mocked.retryStream2).toHaveBeenCalledWith(93301, 11112, "Тест кампания", "test-kampaniya", "AU");
     expect(await screen.findByRole("heading", { name: "Кампания создана" })).toBeInTheDocument();
   });
 

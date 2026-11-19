@@ -13,7 +13,7 @@ interface Props {
   stream: Stream; // поток, который отправляем
   onClose: () => void;
   onPushed: (stream: Stream) => void; // отправка прошла
-  onFailed: (message: string) => void; // отправка не удалась (черновик сохранён), диалог закрывается
+  onFailed: (message: string, resolutions: Resolutions) => void; // отправка не удалась (черновик сохранён), диалог закрывается; решения по конфликтам сохраняются для повтора
 }
 
 /** Заголовки вариантов для известных спорных пунктов (по окончанию ключа). */
@@ -99,10 +99,15 @@ export function PushDialog({ stream, onClose, onPushed, onFailed }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // фокус на первую кнопку при открытии
+  // фокус на первую кнопку при открытии; при закрытии возвращаем его туда, откуда диалог открыли
+  const opener = useRef<HTMLElement | null>(document.activeElement as HTMLElement | null);
   useEffect(() => {
     firstButton.current?.focus();
   }, [preview === null]);
+  useEffect(() => {
+    const target = opener.current;
+    return () => target?.focus?.();
+  }, []);
 
   async function choose(key: string, value: Resolution) {
     const next = { ...resolutions, [key]: value };
@@ -121,7 +126,7 @@ export function PushDialog({ stream, onClose, onPushed, onFailed }: Props) {
         await load(resolutions, true);
         setProblem(error.message);
       } else {
-        onFailed(errorText(error));
+        onFailed(errorText(error), resolutions);
       }
     } finally {
       setBusy(false);

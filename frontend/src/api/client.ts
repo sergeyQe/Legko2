@@ -81,11 +81,12 @@ export const api = {
   searchOffers: (query: string) => request<OfferSearchResult[]>("GET", `/offers/search?q=${encodeURIComponent(query)}`),
   references: () => request<References>("GET", "/references"),
   createCampaign: (body: CreateCampaignBody) => request<CreateReport>("POST", "/campaign-creator/campaigns", body),
-  retryStream2: (campaignId: number, offerId: number, name: string, alias: string) =>
+  retryStream2: (campaignId: number, offerId: number, name: string, alias: string, geo: string) =>
     request<CreateReport>("POST", `/campaign-creator/campaigns/${campaignId}/retry-stream2`, {
       offer_id: offerId,
       name,
       alias,
+      geo,
     }),
   mockExternalChange: (body: ExternalChangeBody) => request<{ status: string }>("POST", "/mock/external-change", body),
   mockFailure: (body: FailureBody) => request<{ status: string }>("POST", "/mock/failure", body),

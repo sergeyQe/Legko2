@@ -33,7 +33,7 @@
   --s8: #e39f86;
   --seg-fg: #1d2b24;
   --seg-sh: none;
-  --demo-bg: #e1e6df;
+  --demo-bg: #edf1eb;
   --f-text: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --f-head: "Manrope", "Inter", system-ui, sans-serif;
   --r1: 16px;
@@ -925,10 +925,6 @@ details.same summary {
 
 /* ---------- демо-панель (только режим mock) ---------- */
 .demo {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  align-items: center;
   margin-bottom: 12px;
   padding: 10px 14px;
   background: var(--demo-bg);
@@ -936,29 +932,92 @@ details.same summary {
   border-radius: var(--r2);
   font-size: 13px;
 }
-.demo .lbl {
-  color: var(--muted);
+.demo summary {
+  cursor: pointer;
+  color: var(--fg);
+  font-weight: 500;
+  min-height: 24px;
+}
+.demo[open] summary {
+  margin-bottom: 8px;
+}
+.demo-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
 }
 
 @media (max-width: 860px) {
   .cwrap {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+@media (max-width: 640px) {
+  /* на телефоне кнопки оффера уходят под название */
   .orow {
     grid-template-columns: 14px minmax(0, 1fr) auto;
   }
   .orow .act {
     grid-column: 2 / -1;
   }
-}
-@media (max-width: 640px) {
   .opts,
   .selrow,
   .preview-pair {
     grid-template-columns: minmax(0, 1fr);
   }
+  /* таблица изменений в две строки: название на всю ширину, ниже «Было» и «Станет» с подписями */
   .crow {
-    grid-template-columns: 20px minmax(0, 1fr) 52px 70px;
+    grid-template-columns: 20px minmax(0, 1fr) minmax(0, 1fr);
+    row-gap: 2px;
+  }
+  .crow.h {
+    display: none;
+  }
+  .crow .nm {
+    grid-column: 2 / -1;
+  }
+  .crow:not(.h) > .num {
+    grid-row: 2;
+  }
+  .crow:not(.h) > .num:nth-child(3) {
+    grid-column: 2;
+  }
+  .crow:not(.h) > .num:nth-child(4) {
+    grid-column: 3;
+  }
+  .crow:not(.h) > .num:nth-child(3)::before {
+    content: "Было: ";
+    color: var(--muted);
+    font-weight: 400;
+  }
+  .crow:not(.h) > .num:nth-child(4)::before {
+    content: "Станет: ";
+    color: var(--muted);
+    font-weight: 400;
+  }
+}
+/* на сенсорных экранах цели нажатия крупнее (рекомендация 44 px; мелкие кнопки не меньше 40 px) */
+@media (pointer: coarse) {
+  .btn {
+    min-height: 44px;
+  }
+  .btn.sm {
+    min-height: 40px;
+    padding: 6px 12px;
+  }
+  .pin {
+    width: 40px;
+    height: 40px;
+  }
+  .nav button {
+    min-height: 40px;
+  }
+  .add-row input,
+  .field input,
+  .field select {
+    min-height: 44px;
+    font-size: 16px; /* на iOS меньший размер вызывает масштабирование страницы при фокусе */
   }
 }
 @media (prefers-reduced-motion: reduce) {

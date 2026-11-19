@@ -116,7 +116,7 @@ export function CreateCampaignPage({ onOpenCampaign }: Props) {
     if (!report?.campaign_id || !offer) return;
     setStage("running");
     try {
-      setReport(await api.retryStream2(report.campaign_id, offer.offer_id, report.name, report.alias));
+      setReport(await api.retryStream2(report.campaign_id, offer.offer_id, report.name, report.alias, geo.toUpperCase()));
       setStage("done");
     } catch (e) {
       if (e instanceof ApiError && e.code === "CREATE_PARTIAL") {

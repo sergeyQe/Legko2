@@ -16,6 +16,8 @@ const MESSAGE_MS = 6000; // сколько показываем сообщени
 export function DemoPanel({ onReset }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
+  // на узком экране панель свёрнута, чтобы не занимать место; на широком открыта
+  const startOpen = useRef(typeof window.matchMedia !== "function" || window.matchMedia("(min-width: 641px)").matches);
 
   async function run(action: () => Promise<unknown>, success: string) {
     try {
@@ -30,8 +32,9 @@ export function DemoPanel({ onReset }: Props) {
   }
 
   return (
-    <div className="demo" role="group" aria-label="Демо-панель">
-      <span className="lbl">Демо (mock Keitaro)</span>
+    <details className="demo" open={startOpen.current}>
+      <summary>Демо (mock Keitaro)</summary>
+      <div className="demo-body" role="group" aria-label="Демо-панель">
       <button
         className="btn sm"
         onClick={() =>
@@ -82,6 +85,7 @@ export function DemoPanel({ onReset }: Props) {
           {message}
         </span>
       )}
-    </div>
+      </div>
+    </details>
   );
 }

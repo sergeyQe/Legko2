@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, api } from "../api/client";
-import type { Campaign, Offer, Stream } from "../api/types";
+import type { Campaign, Offer, Resolutions, Stream } from "../api/types";
 import { PushDialog } from "../components/PushDialog";
 import { StreamCard } from "../components/StreamCard";
 import { errorText } from "../lib/format";
@@ -12,20 +12,22 @@ const TOAST_MS = 6000; // сколько показываем сообщение
 interface Props {
   campaignId: number;
   keitaroUrl: string; // адрес Keitaro (пусто в режиме mock)
+  onBack: () => void; // вернуться к списку кампаний
 }
 
 interface Toast {
-  kind: "ok" | "err";
+  kind: "ok" | "err" | "warn";
   text: string;
 }
 
-export function CampaignEditorPage({ campaignId, keitaroUrl }: Props) {
+export function CampaignEditorPage({ campaignId, keitaroUrl, onBack }: Props) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [streamErrors, setStreamErrors] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
   const [pushFor, setPushFor] = useState<Stream | null>(null);
+  const [savedResolutions, setSavedResolutions] = useState<Record<number, Resolutions>>({}); // решения по конфликтам для повтора после ошибки
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const say = useCallback((kind: Toast["kind"], text: string) => {
@@ -63,13 +65,19 @@ export function CampaignEditorPage({ campaignId, keitaroUrl }: Props) {
     );
   }, []);
 
-  /** Выполняет действие над потоком: блокирует кнопки, обновляет поток, показывает ошибку. */
+  /** Выполняет действие над потоком: блокирует кнопки, обновляет поток, показывает результат или ошибку.
+   * Старое сообщение сразу убирается, чтобы оно не противоречило новому состоянию. */
   const run = useCallback(
-    async (action: () => Promise<Stream>, okText?: string): Promise<boolean> => {
+    async (action: () => Promise<Stream>, done?: string | ((updated: Stream) => Toast)): Promise<boolean> => {
+      setToast(null);
       setBusy(true);
       try {
-        replaceStream(await action());
-        if (okText) say("ok", okText);
+        const updated = await action();
+        replaceStream(updated);
+        if (typeof done === "function") {
+          const message = done(updated);
+          say(message.kind, message.text);
+        } else if (done) say("ok", done);
         return true;
       } catch (error) {
         say("err", errorText(error));
@@ -82,10 +90,12 @@ export function CampaignEditorPage({ campaignId, keitaroUrl }: Props) {
   );
 
   async function fetchStreams() {
+    setToast(null);
     setBusy(true);
     try {
       setCampaign(await api.fetchCampaign(campaignId));
       setStreamErrors({});
+      setSavedResolutions({});
       say("ok", "Потоки загружены из KT. Неопубликованные изменения сохранены.");
     } catch (error) {
       say("err", errorText(error));
@@ -99,6 +109,10 @@ export function CampaignEditorPage({ campaignId, keitaroUrl }: Props) {
       const { [streamId]: _removed, ...rest } = current;
       return rest;
     });
+    setSavedResolutions((current) => {
+      const { [streamId]: _saved, ...rest } = current;
+      return rest;
+    });
   }
 
   async function cancel(stream: Stream) {
@@ -109,9 +123,11 @@ export function CampaignEditorPage({ campaignId, keitaroUrl }: Props) {
 
   /** Повторная отправка после ошибки: если появились спорные пункты, открываем диалог. */
   async function retryPush(stream: Stream) {
+    setToast(null);
     setBusy(true);
     try {
-      const sent = await api.push(stream.id, {});
+      // решения по конфликтам, принятые до ошибки, не теряются
+      const sent = await api.push(stream.id, savedResolutions[stream.id] ?? {});
       replaceStream(sent);
       clearStreamError(stream.id);
       say("ok", "Поток отправлен в Keitaro.");
@@ -125,9 +141,16 @@ export function CampaignEditorPage({ campaignId, keitaroUrl }: Props) {
 
   if (loadError) {
     return (
-      <div className="note err" role="alert">
-        <div className="grow">{loadError}</div>
-      </div>
+      <>
+        <div className="note err" role="alert">
+          <div className="grow">{loadError}</div>
+        </div>
+        <div className="btns">
+          <button className="btn primary" onClick={onBack}>
+            К списку кампаний
+          </button>
+        </div>
+      </>
     );
   }
   if (!campaign) return <p className="muted">Открываем кампанию…</p>;
@@ -162,7 +185,7 @@ export function CampaignEditorPage({ campaignId, keitaroUrl }: Props) {
       </div>
 
       {toast ? (
-        <div className={`note ${toast.kind === "err" ? "err" : "ok"} status`} role="status">
+        <div className={`note${toast.kind === "err" ? " err" : toast.kind === "ok" ? " ok" : ""} status`} role="status">
           {toast.text}
         </div>
       ) : (
@@ -176,7 +199,18 @@ export function CampaignEditorPage({ campaignId, keitaroUrl }: Props) {
             stream={stream}
             error={streamErrors[stream.id] ?? null}
             busy={busy}
-            onAdd={(offerId) => run(() => api.addOffer(stream.id, offerId), `Оффер ${offerId} добавлен в черновик. В Keitaro ничего не изменилось.`)}
+            onAdd={(offerId) =>
+              run(
+                () => api.addOffer(stream.id, offerId),
+                (updated) =>
+                  updated.offers.find((o) => o.offer_id === offerId)?.weight === 0
+                    ? {
+                        kind: "warn",
+                        text: `Оффер ${offerId} добавлен, но его доля 0%: все остальные доли закреплены. Открепите вес, чтобы распределить доли.`,
+                      }
+                    : { kind: "ok", text: `Оффер ${offerId} добавлен в черновик. В Keitaro ничего не изменилось.` },
+              )
+            }
             onProblem={(message) => say("err", message)}
             onPin={(offer: Offer) => void run(() => api.pinOffer(stream.id, offer.offer_id, !offer.pinned))}
             onRemove={(offer: Offer) => void run(() => api.removeOffer(stream.id, offer.offer_id))}
@@ -198,8 +232,9 @@ export function CampaignEditorPage({ campaignId, keitaroUrl }: Props) {
             setPushFor(null);
             say("ok", `Поток «${sent.name}» отправлен в Keitaro.`);
           }}
-          onFailed={(message) => {
+          onFailed={(message, resolutions) => {
             setStreamErrors((current) => ({ ...current, [pushFor.id]: message }));
+            setSavedResolutions((current) => ({ ...current, [pushFor.id]: resolutions }));
             setPushFor(null);
           }}
         />
