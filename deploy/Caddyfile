@@ -1,0 +1,21 @@
+# Caddy: отдаёт собранный фронтенд и проксирует /api/* на бэкенд (один адрес, CORS не нужен).
+# SITE_ADDRESS задаётся в .env.prod: например 203-0-113-10.sslip.io (HTTPS и сертификат Caddy получит сам).
+{$SITE_ADDRESS:localhost} {
+	encode gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+
+	# префикс /api отрезается: бэкенд видит обычные маршруты (/campaigns, /health, ...)
+	handle_path /api/* {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

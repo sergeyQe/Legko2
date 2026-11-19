@@ -139,6 +139,42 @@ TEST_DATABASE_URL=postgresql+psycopg://legko2:legko2@localhost:5432/legko2_test 
 
 Тест очищает таблицы этой базы, поэтому не указывайте в `TEST_DATABASE_URL` рабочую базу.
 
+## Деплой на сервер (Docker + Caddy + sslip.io)
+
+Боевой запуск: PostgreSQL, бэкенд и Caddy в `docker-compose.prod.yml`. Caddy отдаёт собранный фронтенд, проксирует `/api/*` на бэкенд и сам получает HTTPS-сертификат. Режим Keitaro на сервере `mock`, пароля на сайте нет (открытая демонстрация).
+
+Нужно: сервер с Linux (Ubuntu или Debian), доступ по SSH, открытые из интернета порты **80 и 443** (в том числе в облачном файрволе провайдера). Домена покупать не нужно: адрес `<IP через дефисы>.sslip.io` указывает на ваш IP автоматически (для IP `203.0.113.10` это `203-0-113-10.sslip.io`).
+
+Команды выполняются на сервере, каждая одной строкой:
+
+```
+curl -fsSL https://get.docker.com | sh
+git clone https://github.com/sergeyQe/Legko2.git && cd Legko2
+cp .env.prod.example .env.prod
+sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 16)/" .env.prod
+sed -i "s/^SITE_ADDRESS=.*/SITE_ADDRESS=$(curl -s https://api.ipify.org | tr . -).sslip.io/" .env.prod
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+```
+
+Первая сборка занимает несколько минут. Затем откройте `https://<IP через дефисы>.sslip.io` (сертификат выпускается около минуты после первого запуска). Swagger: `https://<адрес>/api/docs`.
+
+Полезные команды:
+
+```
+docker compose --env-file .env.prod -f docker-compose.prod.yml ps
+docker compose --env-file .env.prod -f docker-compose.prod.yml logs -f backend
+git pull && docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.prod -f docker-compose.prod.yml exec db pg_dump -U legko2 legko2 > backup.sql
+```
+
+Примечания:
+
+- Первая строка (установка Docker) нужна, только если Docker ещё не стоит. Файрвол на самом сервере: `sudo ufw allow 80,443/tcp` (если используется ufw).
+- Миграции применяются автоматически при старте бэкенда. Данные PostgreSQL хранятся в томе `pgdata_prod` и переживают пересборку.
+- Заглушка Keitaro хранится в памяти бэкенда: после перезапуска контейнера нажмите «Сбросить» в демо-панели.
+- Сайт открыт всем: любой посетитель может пользоваться демо и нажимать «Сбросить». Это допустимо для режима `mock`; перед включением реального Keitaro (`KEITARO_MODE=real`) обязательно закройте сайт паролем (в Caddyfile директива `basicauth`).
+- У sslip.io общий лимит выпуска сертификатов Let's Encrypt; если сертификат не выпускается, подождите или временно укажите `SITE_ADDRESS=http://<адрес>.sslip.io` (без HTTPS).
+
 ## Структура репозитория
 
 ```
@@ -153,7 +189,9 @@ backend/
   tests/         pytest
 frontend/
   src/           React: страницы, компоненты, клиент API, стили (тема «Шалфей», светлая и тёмная)
-docker-compose.yml   PostgreSQL
+docker-compose.yml        PostgreSQL для разработки
+docker-compose.prod.yml   боевой запуск: PostgreSQL + бэкенд + Caddy
+deploy/                   Caddyfile и Dockerfile веб-части (фронтенд + Caddy)
 ```
 
 ## Ограничения и допущения

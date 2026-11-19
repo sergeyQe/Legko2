@@ -1,0 +1,3 @@
+# Скрипты для Linux всегда с переводом строки LF
+*.sh text eol=lf
+Caddyfile text eol=lf
