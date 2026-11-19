@@ -4,14 +4,14 @@ from fastapi import APIRouter, Body, Depends, Path
 from app.api import mappers
 from app.api.deps import get_editor_service
 from app.api.docs import KEITARO_CODES, responses
-from app.api.schemas import AddOfferBody, PinBody, PreviewOut, ResolutionsBody, StreamOut
+from app.api.schemas import MAX_ID, AddOfferBody, PinBody, PreviewOut, ResolutionsBody, StreamOut
 from app.services.editor_service import EditorService
 
 offers_router = APIRouter(prefix="/streams", tags=["Офферы потока"])
 push_router = APIRouter(prefix="/streams", tags=["Предпросмотр и Push"])
 
-STREAM_ID = Path(description="Внутренний ID потока (поле `id` потока из кампании)")
-OFFER_ID = Path(description="ID оффера в Keitaro")
+STREAM_ID = Path(ge=1, le=MAX_ID, description="Внутренний ID потока (поле `id` потока из кампании)")
+OFFER_ID = Path(ge=1, le=MAX_ID, description="ID оффера в Keitaro")
 
 
 @offers_router.post(
@@ -38,7 +38,7 @@ def add_offer(
     summary="Убрать оффер из потока",
     description=(
         "Убирает оффер в черновике. Опубликованный оффер получает вес 0%, остальные пересчитываются, "
-        "оффер уйдёт в архив обёртки после отправки в Keitaro. Неопубликованный (добавленный в черновике) оффер "
+        "оффер уйдёт в архив после отправки в Keitaro. Неопубликованный (добавленный в черновике) оффер "
         "удаляется полностью. Меняет только нашу БД."
     ),
     responses=responses("NOT_FOUND", "OFFER_STATE_ERROR", "WEIGHTS_INVALID"),

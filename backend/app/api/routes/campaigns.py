@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Path
 from app.api import mappers
 from app.api.deps import get_editor_service
 from app.api.docs import KEITARO_CODES, responses
-from app.api.schemas import CampaignOut, CampaignSummaryOut
+from app.api.schemas import MAX_ID, CampaignOut, CampaignSummaryOut
 from app.services.editor_service import EditorService
 
 router = APIRouter(prefix="/campaigns", tags=["Кампании"])
@@ -38,7 +38,7 @@ def list_campaigns(service: EditorService = Depends(get_editor_service)) -> list
     responses=responses("NOT_FOUND"),
 )
 def get_campaign(
-    campaign_id: int = Path(description="Внутренний ID кампании (поле `id` из списка кампаний)"),
+    campaign_id: int = Path(ge=1, le=MAX_ID, description="Внутренний ID кампании (поле `id` из списка кампаний)"),
     service: EditorService = Depends(get_editor_service),
 ) -> CampaignOut:
     """Кампания с потоками из нашей БД."""
@@ -59,7 +59,7 @@ def get_campaign(
     responses=responses("NOT_FOUND", "KEITARO_NOT_FOUND", *KEITARO_CODES),
 )
 def fetch_campaign(
-    campaign_id: int = Path(description="Внутренний ID кампании"),
+    campaign_id: int = Path(ge=1, le=MAX_ID, description="Внутренний ID кампании"),
     service: EditorService = Depends(get_editor_service),
 ) -> CampaignOut:
     """Загрузка потоков кампании из Keitaro."""

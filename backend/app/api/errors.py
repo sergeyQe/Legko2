@@ -4,6 +4,7 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import get_settings
 from app.domain.errors import (
@@ -91,6 +92,31 @@ def _json(status: int, body: dict) -> JSONResponse:
     return JSONResponse(status_code=status, content=body)
 
 
+# русские тексты для типичных ошибок проверки полей (ключ — тип ошибки pydantic)
+_VALIDATION_TEXTS = {
+    "missing": "Поле обязательно.",
+    "int_parsing": "Нужно целое число.",
+    "int_type": "Нужно целое число.",
+    "greater_than": "Значение слишком маленькое.",
+    "greater_than_equal": "Значение слишком маленькое.",
+    "less_than": "Значение слишком большое.",
+    "less_than_equal": "Значение слишком большое.",
+    "string_type": "Нужен текст.",
+    "string_too_long": "Текст слишком длинный.",
+    "bool_parsing": "Нужно значение «да» или «нет».",
+    "bool_type": "Нужно значение «да» или «нет».",
+    "literal_error": "Недопустимое значение.",
+    "json_invalid": "Неверный формат данных.",
+    "model_attributes_type": "Неверный формат данных.",
+    "dict_type": "Неверный формат данных.",
+}
+
+
+def _validation_message(error: dict) -> str:
+    """Русский текст ошибки поля (для незнакомых типов остаётся текст pydantic)."""
+    return _VALIDATION_TEXTS.get(error.get("type", ""), str(error.get("msg", "Неверное значение.")))
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Подключает обработчики ошибок к приложению."""
 
@@ -108,8 +134,21 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-        errors = [{"field": ".".join(str(p) for p in e["loc"][1:]) or "body", "message": e["msg"]} for e in exc.errors()]
+        errors = [
+            {"field": ".".join(str(p) for p in e["loc"][1:]) or "body", "message": _validation_message(e)}
+            for e in exc.errors()
+        ]
         return _json(422, error_body("VALIDATION", "Проверьте введённые данные.", {"errors": errors}))
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        # служебные ответы фреймворка (неизвестный адрес, неверный метод) приводим к нашему формату
+        generic = {404: ("NOT_FOUND", "Такого адреса нет."), 405: ("METHOD_NOT_ALLOWED", "Этот метод здесь не поддерживается.")}
+        code, message = generic.get(exc.status_code, ("HTTP_ERROR", "Не удалось выполнить запрос."))
+        detail = exc.detail if isinstance(exc.detail, str) else ""
+        if detail and detail not in ("Not Found", "Method Not Allowed"):
+            message = detail  # наш собственный текст (например, у демо-маршрутов вне режима mock)
+        return _json(exc.status_code, error_body(code, message))
 
     @app.exception_handler(Exception)
     async def unexpected_handler(request: Request, exc: Exception) -> JSONResponse:

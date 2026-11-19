@@ -4,7 +4,7 @@ from fastapi import APIRouter, Body, Depends, Path
 from app.api import mappers
 from app.api.deps import get_creator_service
 from app.api.docs import KEITARO_CODES, responses
-from app.api.schemas import CreateCampaignBody, CreateReportOut, RetryStream2Body
+from app.api.schemas import MAX_ID, CreateCampaignBody, CreateReportOut, RetryStream2Body
 from app.services.creator_service import CreatorService
 
 router = APIRouter(prefix="/campaign-creator", tags=["Создание кампании"])
@@ -47,9 +47,9 @@ def create_campaign(
     responses=responses("VALIDATION", "CREATE_PARTIAL", "KEITARO_NOT_FOUND", *KEITARO_CODES),
 )
 def retry_stream2(
-    campaign_id: int = Path(description="ID кампании в Keitaro (`campaign_id` из отчёта о создании)"),
+    campaign_id: int = Path(ge=1, le=MAX_ID, description="ID кампании в Keitaro (`campaign_id` из отчёта о создании)"),
     body: RetryStream2Body = Body(),
     service: CreatorService = Depends(get_creator_service),
 ) -> CreateReportOut:
     """Повтор создания потока 2."""
-    return mappers.report_out(service.retry_stream2(campaign_id, body.offer_id, body.name, body.alias))
+    return mappers.report_out(service.retry_stream2(campaign_id, body.offer_id, body.name, body.alias, body.geo))

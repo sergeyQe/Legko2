@@ -196,7 +196,7 @@ def compute_changes(offers: list[DraftOffer]) -> list[Change]:
             note = "вернётся из архива" if offer.was_archived else "новый оффер в потоке"
             changes.append(Change("add", offer, None, offer.weight, note))
         elif state == OfferState.REMOVING:
-            changes.append(Change("remove", offer, offer.kt_weight, 0, "уйдёт в архив обёртки"))
+            changes.append(Change("remove", offer, offer.kt_weight, 0, "уйдёт в архив"))
         elif state == OfferState.PUBLISHED and offer.weight != offer.kt_weight:
             note = "вес закреплён" if offer.pinned else "пересчёт долей"
             changes.append(Change("change", offer, offer.kt_weight, offer.weight, note))

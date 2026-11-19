@@ -4,6 +4,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+MAX_ID = 2_147_483_647  # предел целого в PostgreSQL (INTEGER): больший ID вызвал бы ошибку БД, поэтому отсекаем заранее
+
 
 # ---------- ошибки ----------
 
@@ -25,7 +27,7 @@ class OfferOut(BaseModel):
     geo: str = Field(description="Гео оффера для подписи", examples=["Румыния"])
     state: Literal["published", "added", "removing", "removed"] = Field(
         description="published — опубликован; added — добавлен, не опубликован; "
-                    "removing — убран, в Keitaro ещё есть; removed — удалён (архив обёртки)"
+                    "removing — убран, в Keitaro ещё есть; removed — удалён (в архиве)"
     )
     weight: int = Field(description="Вес в черновике, % (у убранных 0)", examples=[25])
     kt_weight: int = Field(description="Вес в Keitaro по последней загрузке, %", examples=[33])
@@ -75,7 +77,9 @@ class CampaignSummaryOut(BaseModel):
 class AddOfferBody(BaseModel):
     """Тело запроса добавления оффера."""
 
-    offer_id: int = Field(description="ID оффера из базы Keitaro (выбирается через /offers/search)", examples=[11112])
+    offer_id: int = Field(
+        ge=1, le=MAX_ID, description="ID оффера из базы Keitaro (выбирается через /offers/search)", examples=[11112]
+    )
 
 
 class PinBody(BaseModel):
@@ -142,18 +146,21 @@ class CreateCampaignBody(BaseModel):
 
     name: str = Field(description="Название кампании", examples=["Тест кампания"])
     geo: str = Field(description="Код страны: две латинские буквы (приводится к верхнему регистру)", examples=["AU"])
-    offer_id: int = Field(description="ID оффера для потока 2", examples=[11112])
-    domain_id: Optional[int] = Field(default=None, description="ID домена; null — создать без домена")
-    group_id: Optional[int] = Field(default=None, description="ID группы; null — создать без группы")
-    source_id: Optional[int] = Field(default=None, description="ID источника трафика; null — создать без источника")
+    offer_id: int = Field(ge=1, le=MAX_ID, description="ID оффера для потока 2", examples=[11112])
+    domain_id: Optional[int] = Field(default=None, ge=1, le=MAX_ID, description="ID домена; null — создать без домена")
+    group_id: Optional[int] = Field(default=None, ge=1, le=MAX_ID, description="ID группы; null — создать без группы")
+    source_id: Optional[int] = Field(
+        default=None, ge=1, le=MAX_ID, description="ID источника трафика; null — создать без источника"
+    )
 
 
 class RetryStream2Body(BaseModel):
     """Данные для повторного создания потока 2."""
 
-    offer_id: int = Field(description="ID оффера для потока 2", examples=[11112])
-    name: str = Field(default="", description="Название кампании (для отчёта)")
-    alias: str = Field(default="", description="Алиас кампании (для отчёта)")
+    offer_id: int = Field(ge=1, le=MAX_ID, description="ID оффера для потока 2", examples=[11112])
+    name: str = Field(default="", max_length=255, description="Название кампании (для отчёта)")
+    alias: str = Field(default="", max_length=100, description="Алиас кампании (для отчёта)")
+    geo: str = Field(default="", max_length=2, description="Код страны потока 1 (для отчёта; необязательно)", examples=["AU"])
 
 
 class StepOut(BaseModel):

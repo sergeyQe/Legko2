@@ -195,6 +195,50 @@ def test_request_validation_uses_common_error_format(api):
     assert_error(api.post(f"/streams/{sid}/push", json={"resolutions": {"x": "maybe"}}), 422, "VALIDATION")
 
 
+def test_too_large_ids_are_validation_errors_not_server_errors(api):
+    huge = 99999999999999999999
+    for response in (
+        api.get(f"/campaigns/{huge}"),
+        api.post(f"/campaigns/{huge}/fetch"),
+        api.post(f"/streams/{huge}/cancel"),
+        api.delete(f"/streams/1/offers/{huge}"),
+        api.post("/streams/1/offers", json={"offer_id": huge}),
+        api.post("/campaign-creator/campaigns", json={"name": "Т", "geo": "AU", "offer_id": 11112, "domain_id": huge}),
+    ):
+        body = assert_error(response, 422, "VALIDATION")
+        assert body["details"]["errors"]
+    assert_error(api.get("/campaigns/0"), 422, "VALIDATION")
+
+
+def test_framework_errors_use_the_common_format(api):
+    body = assert_error(api.get("/no/such/path"), 404, "NOT_FOUND")
+    assert body["message"] == "Такого адреса нет."
+    assert_error(api.put("/health"), 405, "METHOD_NOT_ALLOWED")
+
+
+def test_error_texts_are_in_russian(api):
+    assert api.get("/campaigns/999").json()["message"] == "Кампания 999 не найдена."
+    sid = stream2(api)["id"]
+    assert api.post(f"/streams/{sid}/offers", json={"offer_id": 99999}).json()["message"] == "Оффер 99999 не найден."
+    body = api.post(f"/streams/{sid}/offers", json={"offer_id": "abc"}).json()
+    assert body["details"]["errors"][0]["message"] == "Нужно целое число."
+    missing = api.post(f"/streams/{sid}/offers", json={}).json()
+    assert missing["details"]["errors"][0]["message"] == "Поле обязательно."
+
+
+def test_retry_stream2_report_uses_detailed_labels_when_context_is_given(api, mock_kt):
+    api.post("/mock/failure", json={"kind": "rejected", "target": "create_stream2"})
+    created = api.post("/campaign-creator/campaigns", json={"name": "Лето", "geo": "AU", "offer_id": 11112})
+    campaign_id = created.json()["details"]["campaign_id"]
+    retry = api.post(
+        f"/campaign-creator/campaigns/{campaign_id}/retry-stream2",
+        json={"offer_id": 11112, "name": "Лето", "alias": "leto", "geo": "au"},
+    ).json()
+    texts = [s["description"] for s in retry["steps"]]
+    assert texts[0] == "Кампания «Лето» (алиас leto)"
+    assert texts[1].startswith("Поток 1: страна AU принимается")
+
+
 def test_unexpected_error_is_hidden_behind_generic_response(session):
     app = create_app()
     app.dependency_overrides[get_session] = lambda: session

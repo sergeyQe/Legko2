@@ -69,17 +69,28 @@ class CreatorService:
         logger.info("Создание кампании: кампания %s готова", campaign.campaign_id)
         return report
 
-    def retry_stream2(self, campaign_id: int, offer_id: int, name: str = "", alias: str = "") -> CreateReport:
-        """Повторяет создание потока 2 для кампании, у которой он не создался."""
+    def retry_stream2(
+        self, campaign_id: int, offer_id: int, name: str = "", alias: str = "", geo: str = ""
+    ) -> CreateReport:
+        """Повторяет создание потока 2 для кампании, у которой он не создался.
+
+        name, alias и geo необязательны и нужны только для подробных подписей шагов в отчёте.
+        """
         # если поток с этим оффером уже есть, повторно не создаём
         streams = self._keitaro.get_campaign_streams(campaign_id)
         if not any(not s.offers for s in streams):
             raise ValidationError("campaign", "В кампании нет потока 1 (без офферов): повторить создание потока 2 нельзя.")
         already = any(o.offer_id == offer_id for s in streams for o in s.offers)
 
+        # подписи такие же подробные, как при первом создании, если известны название, алиас и страна
+        campaign_text = f"Кампания «{name}» (алиас {alias})" if name and alias else "Кампания создана"
+        country = geo.strip().upper()
+        stream1_text = (
+            f"{STREAM1_NAME}: страна {country} принимается, редирект на {REDIRECT_URL}" if country else f"{STREAM1_NAME} создан"
+        )
         steps = [
-            StepResult("campaign", "Кампания создана", "ok"),
-            StepResult("stream1", f"{STREAM1_NAME} создан", "ok"),
+            StepResult("campaign", campaign_text, "ok"),
+            StepResult("stream1", stream1_text, "ok"),
             StepResult("stream2", f"{STREAM2_NAME}: оффер {offer_id}, доля 100%", "skipped"),
         ]
         report = CreateReport(ok=False, campaign_id=campaign_id, name=name, alias=alias, steps=steps)

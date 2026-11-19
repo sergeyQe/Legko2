@@ -4,11 +4,19 @@ from app.domain.merge import MergeItem
 from app.services.views import CreateReport
 
 
+# тексты сообщений с правильными окончаниями
+_NOT_FOUND_TEXTS = {
+    "campaign": "Кампания {id} не найдена.",
+    "stream": "Поток {id} не найден.",
+    "offer": "Оффер {id} не найден.",
+}
+
+
 class EntityNotFoundError(DomainError):
     """Нашей сущности (кампании, потока, оффера) нет в БД."""
 
     def __init__(self, entity: str, entity_id: int):
-        super().__init__(f"Не найдено: {entity} {entity_id}.")
+        super().__init__(_NOT_FOUND_TEXTS.get(entity, "Объект {id} не найден.").format(id=entity_id))
         self.entity = entity  # тип сущности: campaign, stream, offer
         self.entity_id = entity_id  # ID сущности
 
