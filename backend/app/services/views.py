@@ -57,6 +57,37 @@ class CampaignSummary:
 
 
 @dataclass
+class StepResult:
+    """Результат одного шага создания кампании."""
+
+    name: str  # шаг: campaign, stream1, stream2
+    description: str  # что делает шаг (для показа пользователю)
+    status: str  # ok — выполнен, failed — ошибка, skipped — не выполнялся
+    error: Optional[str] = None  # текст ошибки Keitaro, если шаг не выполнен
+
+
+@dataclass
+class CreateReport:
+    """Отчёт о создании кампании по шагам."""
+
+    ok: bool  # все ли шаги выполнены
+    campaign_id: Optional[int]  # ID созданной кампании в Keitaro (None, если кампания не создана)
+    name: str  # название кампании
+    alias: str  # алиас кампании
+    steps: list[StepResult]  # результаты шагов
+
+
+@dataclass
+class ReferenceDefaults:
+    """ID значений по умолчанию (домен, группа, источник); None — такого значения нет в Keitaro."""
+
+    domain_id: Optional[int]  # ID домена по умолчанию
+    group_id: Optional[int]  # ID группы по умолчанию
+    source_id: Optional[int]  # ID источника по умолчанию
+    missing: list[str]  # названия значений по умолчанию, которых нет в Keitaro
+
+
+@dataclass
 class PreviewView:
     """Предпросмотр отправки: что изменится в Keitaro и какие есть расхождения."""
 

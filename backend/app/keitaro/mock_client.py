@@ -23,7 +23,7 @@ from app.keitaro.models import CatalogOffer, KtCampaign, KtReference, KtStream, 
 logger = logging.getLogger(__name__)
 
 FAILURE_KINDS = ("network", "auth", "edition", "not_found", "rejected")  # виды имитируемых сбоев
-FAILURE_TARGETS = ("fetch", "push", "create_campaign", "create_stream2")  # операции, на которых сбой возможен
+FAILURE_TARGETS = ("fetch", "push", "create_campaign", "create_stream1", "create_stream2")  # операции со сбоем
 
 # каталог офферов (по скриншотам): ID, название, гео
 _CATALOG = [
@@ -260,6 +260,7 @@ class MockKeitaroClient(KeitaroClient):
 
     def create_country_redirect_stream(self, campaign_id: int, name: str, country_code: str, url: str) -> KtStream:
         with self._lock:
+            self._maybe_fail("create_stream1")
             if campaign_id not in self._campaigns:
                 raise KeitaroNotFoundError(f"Campaign {campaign_id} not found", entity="campaign", entity_id=campaign_id)
             return self._create_stream(campaign_id, name, [])

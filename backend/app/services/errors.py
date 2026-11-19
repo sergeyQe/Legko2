@@ -1,6 +1,7 @@
 """Ошибки сервисного слоя."""
 from app.domain.errors import DomainError
 from app.domain.merge import MergeItem
+from app.services.views import CreateReport
 
 
 class EntityNotFoundError(DomainError):
@@ -10,6 +11,14 @@ class EntityNotFoundError(DomainError):
         super().__init__(f"Не найдено: {entity} {entity_id}.")
         self.entity = entity  # тип сущности: campaign, stream, offer
         self.entity_id = entity_id  # ID сущности
+
+
+class CreatePartialError(DomainError):
+    """Создание кампании остановилось после создания кампании: часть шагов выполнена."""
+
+    def __init__(self, report: "CreateReport"):
+        super().__init__("Кампания создана не полностью. Кампанию мы не удаляем.")
+        self.report = report  # отчёт по шагам
 
 
 class MergeConflictError(DomainError):

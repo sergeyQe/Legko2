@@ -44,5 +44,13 @@ class EmptyStreamError(DomainError):
         super().__init__("Нельзя отправить поток без активных офферов.")
 
 
+class ValidationError(DomainError):
+    """Введены неверные данные. Поле field подсказывает, какое поле формы исправить."""
+
+    def __init__(self, field: str, message: str):
+        super().__init__(message)
+        self.field = field  # имя поля: name, geo, offer
+
+
 class InvalidResolutionError(DomainError):
     """Решение по конфликту merge задано неверно."""
