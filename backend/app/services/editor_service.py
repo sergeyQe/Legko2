@@ -161,6 +161,7 @@ class EditorService:
     def preview(self, stream_id: int, resolutions: Optional[dict[str, str]] = None) -> PreviewView:
         """Показывает, что уйдёт в Keitaro: объединяет черновик с текущим потоком Keitaro, ничего не сохраняя."""
         stream = self._get_stream(stream_id)
+        self._require_live_ours(stream)
         kt_stream = self._keitaro.get_stream(stream.keitaro_id)
         merged = merge_with_keitaro(stream_to_drafts(stream), kt_stream.offers, resolutions)
 
@@ -179,6 +180,7 @@ class EditorService:
     def push(self, stream_id: int, resolutions: Optional[dict[str, str]] = None) -> StreamView:
         """Отправляет поток в Keitaro: полностью заменяет его офферы итогом объединения."""
         stream = self._get_stream(stream_id)
+        self._require_live_ours(stream)
 
         # объединяем черновик с текущим состоянием Keitaro
         kt_stream = self._keitaro.get_stream(stream.keitaro_id)
@@ -218,6 +220,11 @@ class EditorService:
         if not self._is_ours(campaign_name):
             logger.warning("Отказ: кампания «%s» не начинается с префикса, действие над ней запрещено", campaign_name)
             raise EntityNotFoundError(entity, entity_id)
+
+    def _require_live_ours(self, stream: Stream) -> None:
+        """Перед записью в Keitaro сверяем живое название кампании: её могли переименовать после последней загрузки."""
+        kt_campaign = self._keitaro.get_campaign(stream.campaign.keitaro_id)
+        self._require_ours(kt_campaign.name, "stream", stream.id)
 
     def _drop_foreign_campaigns(self) -> None:
         """Удаляет из нашей копии кампании без префикса (остатки прежних запусков); в Keitaro ничего не меняется."""

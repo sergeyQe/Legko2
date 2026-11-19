@@ -1,7 +1,7 @@
 """Клиент настоящего Keitaro Admin API (по схеме openapi.json).
 
-ВАЖНО: на живом Keitaro клиент не проверялся (доступа к ключу нет). Допущения помечены в коде как «не подтверждено»
-и описаны в README. Поля Keitaro переводятся в нашу модель только здесь.
+Проверено на живом стенде: создание кампании и потоков, чтение, Push без изменений. Допущения (замена офферов целиком
+через PUT) описаны в README. Поля Keitaro переводятся в нашу модель только здесь.
 """
 import logging
 from typing import Any, Optional
@@ -27,9 +27,9 @@ CAMPAIGNS_PAGE_SIZE = 100
 CAMPAIGNS_MAX_PAGES = 50  # защита от бесконечного перебора страниц
 MAX_LOGGED_BODY = 2000  # сколько символов тела пишем в DEBUG-лог
 
-# Не подтверждено на живом Keitaro: ключ действия «редирект» (список доступных действий отдаёт GET /streams_actions)
+# Подтверждено на живом Keitaro: ключ действия «редирект» (список доступных действий отдаёт GET /streams_actions)
 REDIRECT_ACTION_TYPE = "http"
-# Не подтверждено на живом Keitaro: имя фильтра по стране (список фильтров отдаёт GET /stream_filters)
+# Подтверждено на живом Keitaro: имя фильтра по стране (список фильтров отдаёт GET /stream_filters)
 COUNTRY_FILTER_NAME = "country"
 # Состояние оффера в потоке, которое считаем активным
 ACTIVE_OFFER_STATE = "active"
@@ -241,7 +241,7 @@ class HttpKeitaroClient(KeitaroClient):
             "type": "default",
             "position": 2,
             "state": "active",
-            "action_type": REDIRECT_ACTION_TYPE,  # Не подтверждено: поле обязательно по схеме, значение для schema=landings
+            "action_type": REDIRECT_ACTION_TYPE,  # Принято стендом: поле обязательно по схеме, значение для schema=landings
             "offers": [{"offer_id": offer_id, "share": share, "state": ACTIVE_OFFER_STATE}],
         }
         return self._to_stream(self._request("POST", "/streams", json=body), {})

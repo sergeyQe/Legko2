@@ -1,4 +1,5 @@
 """Сервис редактора: сценарий из видео на заглушке Keitaro и БД SQLite."""
+import dataclasses
 import pytest
 
 from app.domain.errors import EmptyStreamError, OfferAlreadyInStreamError
@@ -273,6 +274,17 @@ def test_foreign_campaign_is_not_listed_and_cannot_be_fetched(svc, kt):
         svc.fetch_campaign(FOREIGN_CAMPAIGN_ID)
     # чужой поток в Keitaro не прочитан и не изменён
     assert len(kt.get_campaign_streams(FOREIGN_CAMPAIGN_ID)) == 1
+
+
+def test_renamed_campaign_cannot_be_previewed_or_pushed(svc, kt, stream_id):
+    """Кампанию переименовали в Keitaro без префикса после загрузки: отправка и предпросмотр запрещены."""
+    svc.add_offer(stream_id, 11112)
+    kt._campaigns[93212] = dataclasses.replace(kt._campaigns[93212], name="other_name")
+    with pytest.raises(EntityNotFoundError):
+        svc.preview(stream_id)
+    with pytest.raises(EntityNotFoundError):
+        svc.push(stream_id)
+    assert len(kt.get_stream(2).offers) == 3
 
 
 def test_prefix_check_ignores_case(session, kt):

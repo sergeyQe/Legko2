@@ -13,6 +13,8 @@ def build_keitaro_client(settings: Settings) -> KeitaroClient:
     """Создаёт HTTP-клиента настоящего Keitaro; адрес и ключ обязательны."""
     if not settings.keitaro_url or not settings.keitaro_api_key:
         raise ValueError("Задайте KEITARO_URL и KEITARO_API_KEY (адрес и ключ Admin API Keitaro)")
+    if not settings.campaign_prefix.strip():
+        raise ValueError("Задайте CAMPAIGN_PREFIX (например test_titov_): стенд общий, сервис работает только со своими кампаниями")
     logger.info("Keitaro: %s", settings.keitaro_url)
     return HttpKeitaroClient(settings.keitaro_url, settings.keitaro_api_key, settings.keitaro_timeout_seconds)
 

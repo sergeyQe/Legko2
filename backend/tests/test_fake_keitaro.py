@@ -172,8 +172,14 @@ def test_reset_restores_seed_and_clears_failures(kt):
 
 
 def test_factory_builds_http_client_for_real_keitaro():
-    client = build_keitaro_client(Settings(_env_file=None, keitaro_url="https://kt.example.com", keitaro_api_key="k"))
+    client = build_keitaro_client(Settings(_env_file=None, keitaro_url="https://kt.example.com", keitaro_api_key="k",
+                                          campaign_prefix="test_titov_"))
     assert isinstance(client, HttpKeitaroClient)
+
+
+def test_factory_requires_campaign_prefix():
+    with pytest.raises(ValueError):
+        build_keitaro_client(Settings(_env_file=None, keitaro_url="https://kt.example.com", keitaro_api_key="k"))
 
 
 def test_factory_requires_url_and_key():
